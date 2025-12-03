@@ -202,12 +202,13 @@ async function logToSheet(entry) {
     entry.driverType,      // E
     entry.choice,          // F
     entry.membershipText,  // G
+    entry.joinDate,        // H
   ]];
 
   try {
     const res = await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: "Sheet1!A:G",
+      range: "Sheet1!A:H",
       valueInputOption: "USER_ENTERED",
       requestBody: { values },
     });
@@ -302,7 +303,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       .setTitle("📋 TTRL Sign-Up Process")
       .setDescription(
         "Welcome to the TTRL sign-up process!\n\n" +
-          "As we approach our new season, we need to confirm each driver’s intentions for the upcoming season.\n\n" +
+          "As we approach our new season, we need to confirm each driver's intentions for the upcoming season.\n\n" +
           "Please select an option below and follow the prompts.\n\n" +
           "Thank you."
       )
@@ -383,6 +384,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const joinedTs = member.joinedTimestamp || Date.now();
   const membershipText = formatMembership(joinedTs);
 
+  // Discord join date in YYYY-MM-DD format
+  const joinDate = member.joinedAt 
+    ? member.joinedAt.toISOString().split('T')[0] 
+    : 'Unknown';
+
   // Step 1: panel buttons (Current FT / Current Reserve)
   if (baseId === "ttrl_open_ft" || baseId === "ttrl_open_res") {
     const isFT = member.roles.cache.has(ftRoleId);
@@ -391,7 +397,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (baseId === "ttrl_open_ft" && !isFT) {
       return interaction.reply({
         content:
-          "You clicked **Current Full Time Driver**, but you don’t have the FT driver role.",
+          "You clicked **Current Full Time Driver**, but you don't have the FT driver role.",
         ephemeral: true,
       });
     }
@@ -399,7 +405,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (baseId === "ttrl_open_res" && !isReserve) {
       return interaction.reply({
         content:
-          "You clicked **Current Reserve**, but you don’t have the Reserve driver role.",
+          "You clicked **Current Reserve**, but you don't have the Reserve driver role.",
         ephemeral: true,
       });
     }
@@ -430,7 +436,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       content =
         "For **Reserve Drivers**:\n" +
         "What are you looking for next season?";
-
       row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`ttrl_res_ft:${ftRoleId}:${reserveRoleId}`)
@@ -463,7 +468,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (already) {
       return interaction.reply({
         content:
-          "You’ve already submitted your TTRL signup. If you need to change your answer, please contact an admin.",
+          "You've already submitted your TTRL signup. If you need to change your answer, please contact an admin.",
         ephemeral: true,
       });
     }
@@ -518,6 +523,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       choice,
       timestamp: formatTimestamp(),
       membershipText,
+      joinDate: member.joinedAt ? member.joinedAt.toISOString().split('T')[0] : 'Unknown',
     });
 
     // Refresh summary in the configured stats channel for this guild
