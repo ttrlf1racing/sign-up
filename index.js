@@ -85,7 +85,7 @@ function formatMembership(joinedTimestamp) {
   if (years === 0 && months === 0) return "<1m";
   if (years === 0) return `${months}m`;
   if (months === 0) return `${years} Years`;
-  return `${years} seasons ${months}m`;
+  return `${years} Years ${months}m`;
 }
 
 // Check if a server display name has already submitted
