@@ -85,7 +85,7 @@ function formatMembership(joinedTimestamp) {
   if (years === 0 && months === 0) return "<1m";
   if (years === 0) return `${months}m`;
   if (months === 0) return `${years} Years`;
-  return `${years} Years ${months}m`;
+  return `${years} seasons ${months}m`;
 }
 
 // Check if a server display name has already submitted
@@ -94,7 +94,7 @@ async function hasAlreadySubmitted(displayName) {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!B:B", // column B = server display name
+    range: "Sheet1!B:B",
   });
 
   const rows = res.data.values || [];
@@ -105,10 +105,9 @@ async function hasAlreadySubmitted(displayName) {
 async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
 
-  // Columns E (Driver Type) and F (Answer)
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!E:F",
+    range: "Sheet1!E:E,M:M",
   });
 
   const rows = res.data.values || [];
@@ -195,20 +194,25 @@ async function logToSheet(entry) {
   const sheets = await getSheetsClient();
 
   const values = [[
-    entry.timestamp,       // A
-    entry.displayName,     // B
-    entry.username,        // C
-    entry.currentRole,     // D
-    entry.driverType,      // E
-    entry.choice,          // F
-    entry.membershipText,  // G
-    entry.joinDate,        // H
+    entry.timestamp,
+    entry.displayName,
+    entry.username,
+    entry.currentRole,
+    entry.driverType,
+    entry.membershipText,
+    entry.joinDate,
+    entry.userId,
+    entry.accountCreated,
+    entry.avatarUrl,
+    entry.allRoles,
+    entry.boostStatus,
+    entry.choice,
   ]];
 
   try {
     const res = await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: "Sheet1!A:H",
+      range: "Sheet1!A:M",
       valueInputOption: "USER_ENTERED",
       requestBody: { values },
     });
@@ -219,10 +223,6 @@ async function logToSheet(entry) {
     throw err;
   }
 }
-
-// ---------------------------------------------------------------------
-// DISCORD CLIENT
-// ---------------------------------------------------------------------
 
 const client = new Client({
   intents: [
@@ -236,12 +236,7 @@ client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);
 });
 
-// ---------------------------------------------------------------------
-// INTERACTION HANDLER
-// ---------------------------------------------------------------------
-
 client.on(Events.InteractionCreate, async (interaction) => {
-  // Slash command: /ttrl-signup
   if (interaction.isChatInputCommand()) {
     if (interaction.commandName !== "ttrl-signup") return;
 
@@ -267,10 +262,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const ftRole = interaction.options.getRole("ft_role", true);
     const reserveRole = interaction.options.getRole("reserve_role", true);
-    const statsChannel = interaction.options.getChannel(
-      "stats_channel",
-      true
-    );
+    const statsChannel = interaction.options.getChannel("stats_channel", true);
 
     if (!statsChannel.isTextBased()) {
       return interaction.reply({
@@ -279,7 +271,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Remember which channel to use for summary for this guild
     statsChannelByGuild.set(interaction.guildId, statsChannel.id);
 
     let channel = null;
@@ -291,13 +282,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (!channel || !channel.isTextBased()) {
       return interaction.reply({
-        content:
-          "I couldn't post in that channel. Please use a normal text channel I can send messages in.",
+        content: "I couldn't post in that channel. Please use a normal text channel I can send messages in.",
         ephemeral: true,
       });
     }
 
-    // Panel content with logo embed
     const file = new AttachmentBuilder("ttrl-logo.png");
     const embed = new EmbedBuilder()
       .setTitle("📋 TTRL Sign-Up Process")
@@ -329,18 +318,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
 
       await interaction.reply({
-        content:
-          "Signup panel posted in this channel and stats channel saved.",
+        content: "Signup panel posted in this channel and stats channel saved.",
         ephemeral: true,
       });
 
-      // Initial summary build
       await updateSignupSummaryMessage(client, interaction.guildId);
     } catch (err) {
       console.error("Error sending panel message:", err);
       await interaction.reply({
-        content:
-          "I couldn't post in this channel. Please check my permissions and try again.",
+        content: "I couldn't post in this channel. Please check my permissions and try again.",
         ephemeral: true,
       });
     }
@@ -348,16 +334,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  // -------------------------------------------------------------------
-  // BUTTONS
-  // -------------------------------------------------------------------
-
   if (!interaction.isButton()) return;
 
   const [baseId, ftRoleId, reserveRoleId] = interaction.customId.split(":");
   const user = interaction.user;
 
-  // Ensure we have a full GuildMember
   let member = interaction.member;
   if (!member && interaction.guild) {
     try {
@@ -369,43 +350,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (!member) {
     return interaction.reply({
-      content:
-        "I couldn't load your server info. Please try again or contact an admin.",
+      content: "I couldn't load your server info. Please try again or contact an admin.",
       ephemeral: true,
     });
   }
 
   const guildId = interaction.guildId;
-
-  // Server display name (nickname or username)
   const displayName = member.displayName || user.username;
-
-  // How long in server (seasons & months)
   const joinedTs = member.joinedTimestamp || Date.now();
   const membershipText = formatMembership(joinedTs);
-
-  // Discord join date in YYYY-MM-DD format
-  const joinDate = member.joinedAt 
-    ? member.joinedAt.toISOString().split('T')[0] 
-    : 'Unknown';
-
-  // Step 1: panel buttons (Current FT / Current Reserve)
+  const joinDate = member.joinedAt ? member.joinedAt.toISOString().split('T')[0] : 'Unknown';
+  const userId = user.id;
+  const accountCreated = user.createdAt.toISOString().split('T')[0];
+  const avatarUrl = user.displayAvatarURL();
+  const allRoles = member.roles.cache.map(r => r.name).filter(n => n !== '@everyone').join(', ');
+  const boostStatus = member.premiumSince ? 'Yes' : 'No';
   if (baseId === "ttrl_open_ft" || baseId === "ttrl_open_res") {
     const isFT = member.roles.cache.has(ftRoleId);
     const isReserve = member.roles.cache.has(reserveRoleId);
 
     if (baseId === "ttrl_open_ft" && !isFT) {
       return interaction.reply({
-        content:
-          "You clicked **Current Full Time Driver**, but you don't have the FT driver role.",
+        content: "You clicked **Current Full Time Driver**, but you don't have the FT driver role.",
         ephemeral: true,
       });
     }
 
     if (baseId === "ttrl_open_res" && !isReserve) {
       return interaction.reply({
-        content:
-          "You clicked **Current Reserve**, but you don't have the Reserve driver role.",
+        content: "You clicked **Current Reserve**, but you don't have the Reserve driver role.",
         ephemeral: true,
       });
     }
@@ -414,9 +387,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     let row;
 
     if (baseId === "ttrl_open_ft") {
-      content =
-        "For **current Drivers with a Full Time seat**:\n" +
-        "Do you wish a FT seat for next season?";
+      content = "For **current Drivers with a Full Time seat**:\nDo you wish a FT seat for next season?";
 
       row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -433,10 +404,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setStyle(ButtonStyle.Danger)
       );
     } else {
-      content =
-        "For **Reserve Drivers**:\n" +
-        "What are you looking for next season?";
+      content = "For **Reserve Drivers**:\nWhat are you looking for next season?";
+
       row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`ttrl_res_ft:
         new ButtonBuilder()
           .setCustomId(`ttrl_res_ft:${ftRoleId}:${reserveRoleId}`)
           .setLabel("Full Time seat")
@@ -459,24 +431,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
     });
   }
 
-  // Step 2: final answer buttons
   if (!baseId.startsWith("ttrl_")) return;
 
-  // Before recording, check if this display name already submitted
   try {
     const already = await hasAlreadySubmitted(displayName);
     if (already) {
       return interaction.reply({
-        content:
-          "You've already submitted your TTRL signup. If you need to change your answer, please contact an admin.",
+        content: "You've already submitted your TTRL signup. If you need to change your answer, please contact an admin.",
         ephemeral: true,
       });
     }
   } catch (err) {
     console.error("Error checking existing submissions:", err);
     return interaction.reply({
-      content:
-        "I had trouble checking your existing signup. Please try again later or contact an admin.",
+      content: "I had trouble checking your existing signup. Please try again later or contact an admin.",
       ephemeral: true,
     });
   }
@@ -516,17 +484,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   try {
     await logToSheet({
+      timestamp: formatTimestamp(),
       displayName,
       username: `${user.username}`,
       currentRole,
       driverType,
-      choice,
-      timestamp: formatTimestamp(),
       membershipText,
-      joinDate: member.joinedAt ? member.joinedAt.toISOString().split('T')[0] : 'Unknown',
+      joinDate,
+      userId,
+      accountCreated,
+      avatarUrl,
+      allRoles,
+      boostStatus,
+      choice,
     });
 
-    // Refresh summary in the configured stats channel for this guild
     await updateSignupSummaryMessage(client, guildId);
 
     await interaction.reply({
@@ -542,15 +514,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
   } catch (err) {
     console.error("Error logging to sheet:", err);
     await interaction.reply({
-      content:
-        "I couldn't save your answer to the signup sheet. Please ping an admin.",
+      content: "I couldn't save your answer to the signup sheet. Please ping an admin.",
       ephemeral: true,
     });
   }
 });
-
-// ---------------------------------------------------------------------
-// LOGIN
-// ---------------------------------------------------------------------
 
 client.login(process.env.DISCORD_TOKEN);
