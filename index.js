@@ -336,7 +336,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ephemeral: true 
       });
     }
-  }
+  }  // <-- This closes isChatInputCommand()
 
   // -------------------------------------------------------------------
   // BUTTONS
