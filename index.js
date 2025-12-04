@@ -268,10 +268,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const embed = new EmbedBuilder()
         .setTitle('TTRL Sign-Up Process')
         .setDescription(
-          'Welcome to the TTRL sign-up process! As we approach our new season, we need to confirm each driver's intentions for the upcoming season. Please select an option below and follow the prompts. Thank you.'
+          "Welcome to the TTRL sign-up process! As we approach our new season, we need to confirm each driver's intentions for the upcoming season. Please select an option below and follow the prompts. Thank you."
         )
         .setColor(0xffcc00)
         .setThumbnail('attachment://ttrl-logo.png');
+
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
