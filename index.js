@@ -304,7 +304,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     // Command: /ttrl-set-autorole
-    if (interaction.commandName === 'ttrl-set-autorole') {
+    else if (interaction.commandName === 'ttrl-set-autorole') {
       if (!interaction.inGuild()) {
         return interaction.reply({ content: 'Use this command in a server channel.', ephemeral: true });
       }
