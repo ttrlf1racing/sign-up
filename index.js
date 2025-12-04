@@ -221,8 +221,11 @@ client.once(Events.ClientReady, (c) => {
 // INTERACTION HANDLER
 // ---------------------------------------------------------------------
 client.on(Events.InteractionCreate, async (interaction) => {
-  // Slash command: /ttrl-signup
+  // -------------------------------------------------------------------
+  // SLASH COMMANDS
+  // -------------------------------------------------------------------
   if (interaction.isChatInputCommand()) {
+    // Command: /ttrl-signup
     if (interaction.commandName === 'ttrl-signup') {
       if (!interaction.inGuild()) {
         return interaction.reply({ content: 'Use this command in a server channel.', ephemeral: true });
@@ -273,7 +276,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setColor(0xffcc00)
         .setThumbnail('attachment://ttrl-logo.png');
 
-
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`ttrlopen|ft|${ftRole.id}|${reserveRole.id}`)
@@ -298,10 +300,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ephemeral: true,
         });
       }
-      return;
+      return; // EXIT here after handling /ttrl-signup
     }
 
-    // NEW SLASH COMMAND: /ttrl-set-autorole
+    // Command: /ttrl-set-autorole
     if (interaction.commandName === 'ttrl-set-autorole') {
       if (!interaction.inGuild()) {
         return interaction.reply({ content: 'Use this command in a server channel.', ephemeral: true });
@@ -318,7 +320,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       const choice = interaction.options.getString('choice', true);
-      const role = interaction.options.getRole('role');
+      const role = interaction.options.getRole('role'); // This is optional
 
       if (!role) {
         // Remove auto-role for this choice
@@ -336,7 +338,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ephemeral: true 
       });
     }
-  }  // <-- This closes isChatInputCommand()
+
+    // If we get here, it's an unknown command
+    return;
+  }
 
   // -------------------------------------------------------------------
   // BUTTONS
