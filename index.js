@@ -78,7 +78,7 @@ async function hasAlreadySubmitted(displayName) {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: 'Sheet1!B:B', // column B = server display name
+    range: 'Sheet1!B:B',
   });
   const rows = res.data.values;
   return rows.some(row => row[0] === displayName);
@@ -87,7 +87,6 @@ async function hasAlreadySubmitted(displayName) {
 // Read all answers from the sheet and build a summary object
 async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
-  // Columns E=Driver Type and M=Choice
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: 'Sheet1!E:M',
@@ -174,19 +173,19 @@ async function logToSheet(entry) {
 
   const values = [
     [
-      entry.timestamp,         // A
-      entry.displayName,       // B
-      entry.username,          // C
-      entry.currentRole,       // D
-      entry.driverType,        // E
-      entry.membershipText,    // F
-      entry.userId,            // G
-      entry.accountCreated,    // H
-      entry.avatarUrl,         // I
-      entry.allRoles,          // J
-      entry.boostStatus,       // K
-      entry.joinDate,          // L
-      entry.choice,            // M
+      entry.timestamp,
+      entry.displayName,
+      entry.username,
+      entry.currentRole,
+      entry.driverType,
+      entry.membershipText,
+      entry.userId,
+      entry.accountCreated,
+      entry.avatarUrl,
+      entry.allRoles,
+      entry.boostStatus,
+      entry.joinDate,
+      entry.choice,
     ],
   ];
 
@@ -225,6 +224,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   // SLASH COMMANDS
   // -------------------------------------------------------------------
   if (interaction.isChatInputCommand()) {
+    
     // Command: /ttrl-signup
     if (interaction.commandName === 'ttrl-signup') {
       if (!interaction.inGuild()) {
@@ -249,7 +249,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.reply({ content: 'The stats channel must be a normal text channel.', ephemeral: true });
       }
 
-      // Remember which channel to use for summary for this guild
       statsChannelByGuild.set(interaction.guildId, statsChannel.id);
 
       let channel = null;
@@ -266,7 +265,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // Panel content with logo embed
       const file = new AttachmentBuilder('ttrl-logo.png');
       const embed = new EmbedBuilder()
         .setTitle('TTRL Sign-Up Process')
@@ -290,8 +288,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       try {
         await channel.send({ embeds: [embed], components: [row], files: [file] });
         await interaction.reply({ content: 'Signup panel posted in this channel and stats channel saved.', ephemeral: true });
-
-        // Initial summary build
         await updateSignupSummaryMessage(client, interaction.guildId);
       } catch (err) {
         console.error('Error sending panel message:', err);
@@ -300,9 +296,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ephemeral: true,
         });
       }
-      return; // EXIT here after handling /ttrl-signup
+      return;
     }
-
+    
     // Command: /ttrl-set-autorole
     else if (interaction.commandName === 'ttrl-set-autorole') {
       if (!interaction.inGuild()) {
@@ -320,10 +316,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       const choice = interaction.options.getString('choice', true);
-      const role = interaction.options.getRole('role'); // This is optional
+      const role = interaction.options.getRole('role');
 
       if (!role) {
-        // Remove auto-role for this choice
         autoRoleByChoice.delete(choice);
         return interaction.reply({ 
           content: `✅ Automatic role assignment **disabled** for: **${choice}**`, 
@@ -331,18 +326,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // Set auto-role for this choice
       autoRoleByChoice.set(choice, role.id);
       return interaction.reply({ 
         content: `✅ Users who choose **${choice}** will automatically receive the **${role.name}** role.`, 
         ephemeral: true 
       });
     }
-
-    // If we get here, it's an unknown command
+    
     return;
   }
-
   // -------------------------------------------------------------------
   // BUTTONS
   // -------------------------------------------------------------------
@@ -374,9 +366,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const joinedTs = member.joinedTimestamp || Date.now();
   const membershipText = formatMembership(joinedTs);
 
-  // NEW: Collect additional user data
+  // Collect additional user data
   const userId = user.id;
-  const accountCreated = user.createdAt.toISOString().split('T')[0]; // YYYY-MM-DD
+  const accountCreated = user.createdAt.toISOString().split('T')[0];
   const avatarUrl = user.displayAvatarURL({ dynamic: true, size: 256 });
   const allRoles = member.roles.cache.map(r => r.name).filter(n => n !== '@everyone').join(', ') || 'None';
   const boostStatus = member.premiumSince ? `Boosting since ${member.premiumSince.toISOString().split('T')[0]}` : 'Not boosting';
@@ -501,7 +493,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // Refresh summary in the configured stats channel for this guild
     await updateSignupSummaryMessage(client, guildId);
 
-    // NEW: Apply auto-role if configured for this choice
+    // Apply auto-role if configured for this choice
     if (autoRoleByChoice.has(choice)) {
       const roleId = autoRoleByChoice.get(choice);
       try {
