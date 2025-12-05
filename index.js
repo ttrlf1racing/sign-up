@@ -158,10 +158,35 @@ async function updateSignupSummaryMessage(client, guildId) {
   const summary = await getSignupSummaryFromSheets();
   const text = formatSignupSummaryText(summary);
 
-  const messages = await channel.messages.fetch({ limit: 20 });
-  const existing = messages.find(
-    m => m.author.id === client.user.id && m.content.startsWith('**TTRL Signup Summary**')
-  );
+  // Helper: paginate through channel messages to find existing summary
+  async function findExistingSummaryMessage() {
+    let lastId = undefined;
+    let totalFetched = 0;
+    const MAX_FETCH = 500; // safety limit
+
+    while (totalFetched < MAX_FETCH) {
+      const options = { limit: 100 };
+      if (lastId) options.before = lastId;
+
+      const messages = await channel.messages.fetch(options);
+      if (!messages.size) break;
+
+      totalFetched += messages.size;
+      const existing = messages.find(
+        m =>
+          m.author.id === client.user.id &&
+          typeof m.content === 'string' &&
+          m.content.startsWith('**TTRL Signup Summary**')
+      );
+      if (existing) return existing;
+
+      lastId = messages.last().id;
+    }
+
+    return null;
+  }
+
+  const existing = await findExistingSummaryMessage();
 
   if (existing) {
     await existing.edit(text);
@@ -169,6 +194,7 @@ async function updateSignupSummaryMessage(client, guildId) {
     await channel.send(text);
   }
 }
+
 
 // Log one answer into the sheet
 async function logToSheet(entry) {
