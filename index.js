@@ -221,326 +221,356 @@ client.once(Events.ClientReady, (c) => {
 });
 
 // ---------------------------------------------------------------------
-// INTERACTION HANDLER
+// INTERACTION HANDLER (wrapped in try/catch)
 // ---------------------------------------------------------------------
 client.on(Events.InteractionCreate, async (interaction) => {
-  // -------------------------------------------------------------------
-  // SLASH COMMANDS
-  // -------------------------------------------------------------------
-  if (interaction.isChatInputCommand()) {
-    
-    // Command: /ttrl-signup
-    if (interaction.commandName === 'ttrl-signup') {
-      if (!interaction.inGuild()) {
-        return interaction.reply({ content: 'Use this command in a server channel.', ephemeral: true });
+  try {
+    // -----------------------------------------------------------------
+    // SLASH COMMANDS
+    // -----------------------------------------------------------------
+    if (interaction.isChatInputCommand()) {
+      
+      // Command: /ttrl-signup
+      if (interaction.commandName === 'ttrl-signup') {
+        if (!interaction.inGuild()) {
+          return interaction.reply({ content: 'Use this command in a server channel.', ephemeral: true });
+        }
+
+        const perms = interaction.memberPermissions;
+        const isAdminLike =
+          perms &&
+          (perms.has(PermissionsBitField.Flags.Administrator) ||
+            perms.has(PermissionsBitField.Flags.ManageGuild));
+
+        if (!isAdminLike) {
+          return interaction.reply({ content: 'Only admins can post the TTRL signup panel.', ephemeral: true });
+        }
+
+        // SAFE access (no "true" second arg)
+        const ftRole = interaction.options.getRole('ftrole');
+        const reserveRole = interaction.options.getRole('reserverole');
+        const statsChannel = interaction.options.getChannel('statschannel');
+
+        if (!ftRole || !reserveRole || !statsChannel) {
+          return interaction.reply({
+            content:
+              'This command appears to be misconfigured. Please make sure it has options named **ftrole**, **reserverole**, and **statschannel**.',
+            ephemeral: true,
+          });
+        }
+
+        if (!statsChannel.isTextBased()) {
+          return interaction.reply({ content: 'The stats channel must be a normal text channel.', ephemeral: true });
+        }
+
+        statsChannelByGuild.set(interaction.guildId, statsChannel.id);
+
+        let channel = null;
+        try {
+          channel = await client.channels.fetch(interaction.channelId);
+        } catch {
+          channel = null;
+        }
+
+        if (!channel || !channel.isTextBased()) {
+          return interaction.reply({
+            content: "I couldn't post in that channel. Please use a normal text channel I can send messages in.",
+            ephemeral: true,
+          });
+        }
+
+        const file = new AttachmentBuilder('ttrl-logo.png');
+        const embed = new EmbedBuilder()
+          .setTitle('TTRL Sign-Up Process')
+          .setDescription(
+            "Welcome to the TTRL sign-up process! As we approach our new season, we need to confirm each driver's intentions for the upcoming season. Please select an option below and follow the prompts. Thank you."
+          )
+          .setColor(0xffcc00)
+          .setThumbnail('attachment://ttrl-logo.png');
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`ttrlopen|ft|${ftRole.id}|${reserveRole.id}`)
+            .setLabel('Current Full Time Driver')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`ttrlopen|res|${ftRole.id}|${reserveRole.id}`)
+            .setLabel('Current Reserve')
+            .setStyle(ButtonStyle.Secondary)
+        );
+
+        try {
+          await channel.send({ embeds: [embed], components: [row], files: [file] });
+          await interaction.reply({ content: 'Signup panel posted in this channel and stats channel saved.', ephemeral: true });
+          await updateSignupSummaryMessage(client, interaction.guildId);
+        } catch (err) {
+          console.error('Error sending panel message:', err);
+          await interaction.reply({
+            content: "I couldn't post in this channel. Please check my permissions and try again.",
+            ephemeral: true,
+          });
+        }
+        return;
       }
+      
+      // Command: /ttrl-set-autorole
+      else if (interaction.commandName === 'ttrl-set-autorole') {
+        if (!interaction.inGuild()) {
+          return interaction.reply({ content: 'Use this command in a server channel.', ephemeral: true });
+        }
 
-      const perms = interaction.memberPermissions;
-      const isAdminLike =
-        perms &&
-        (perms.has(PermissionsBitField.Flags.Administrator) ||
-          perms.has(PermissionsBitField.Flags.ManageGuild));
+        const perms = interaction.memberPermissions;
+        const isAdminLike =
+          perms &&
+          (perms.has(PermissionsBitField.Flags.Administrator) ||
+            perms.has(PermissionsBitField.Flags.ManageGuild));
 
-      if (!isAdminLike) {
-        return interaction.reply({ content: 'Only admins can post the TTRL signup panel.', ephemeral: true });
-      }
+        if (!isAdminLike) {
+          return interaction.reply({ content: 'Only admins can configure auto-roles.', ephemeral: true });
+        }
 
-      const ftRole = interaction.options.getRole('ftrole', true);
-      const reserveRole = interaction.options.getRole('reserverole', true);
-      const statsChannel = interaction.options.getChannel('statschannel', true);
+        const choice = interaction.options.getString('choice', true);
+        const role = interaction.options.getRole('role'); // optional
 
-      if (!statsChannel.isTextBased()) {
-        return interaction.reply({ content: 'The stats channel must be a normal text channel.', ephemeral: true });
-      }
+        if (!role) {
+          autoRoleByChoice.delete(choice);
+          return interaction.reply({ 
+            content: `✅ Automatic role assignment **disabled** for: **${choice}**`, 
+            ephemeral: true 
+          });
+        }
 
-      statsChannelByGuild.set(interaction.guildId, statsChannel.id);
+        autoRoleByChoice.set(choice, role.id);
+        console.log(`Auto-role configured: "${choice}" → ${role.id}`);
 
-      let channel = null;
-      try {
-        channel = await client.channels.fetch(interaction.channelId);
-      } catch {
-        channel = null;
-      }
-
-      if (!channel || !channel.isTextBased()) {
-        return interaction.reply({
-          content: "I couldn't post in that channel. Please use a normal text channel I can send messages in.",
-          ephemeral: true,
-        });
-      }
-
-      const file = new AttachmentBuilder('ttrl-logo.png');
-      const embed = new EmbedBuilder()
-        .setTitle('TTRL Sign-Up Process')
-        .setDescription(
-          "Welcome to the TTRL sign-up process! As we approach our new season, we need to confirm each driver's intentions for the upcoming season. Please select an option below and follow the prompts. Thank you."
-        )
-        .setColor(0xffcc00)
-        .setThumbnail('attachment://ttrl-logo.png');
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`ttrlopen|ft|${ftRole.id}|${reserveRole.id}`)
-          .setLabel('Current Full Time Driver')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`ttrlopen|res|${ftRole.id}|${reserveRole.id}`)
-          .setLabel('Current Reserve')
-          .setStyle(ButtonStyle.Secondary)
-      );
-
-      try {
-        await channel.send({ embeds: [embed], components: [row], files: [file] });
-        await interaction.reply({ content: 'Signup panel posted in this channel and stats channel saved.', ephemeral: true });
-        await updateSignupSummaryMessage(client, interaction.guildId);
-      } catch (err) {
-        console.error('Error sending panel message:', err);
-        await interaction.reply({
-          content: "I couldn't post in this channel. Please check my permissions and try again.",
-          ephemeral: true,
-        });
-      }
-      return;
-    }
-    
-    // Command: /ttrl-set-autorole
-    else if (interaction.commandName === 'ttrl-set-autorole') {
-      if (!interaction.inGuild()) {
-        return interaction.reply({ content: 'Use this command in a server channel.', ephemeral: true });
-      }
-
-      const perms = interaction.memberPermissions;
-      const isAdminLike =
-        perms &&
-        (perms.has(PermissionsBitField.Flags.Administrator) ||
-          perms.has(PermissionsBitField.Flags.ManageGuild));
-
-      if (!isAdminLike) {
-        return interaction.reply({ content: 'Only admins can configure auto-roles.', ephemeral: true });
-      }
-
-      const choice = interaction.options.getString('choice', true);
-      const role = interaction.options.getRole('role');
-
-      if (!role) {
-        autoRoleByChoice.delete(choice);
         return interaction.reply({ 
-          content: `✅ Automatic role assignment **disabled** for: **${choice}**`, 
+          content: `✅ Users who choose **${choice}** will automatically receive the **${role.name}** role.`, 
           ephemeral: true 
         });
       }
+      
+      return;
+    }
 
-      autoRoleByChoice.set(choice, role.id);
-      console.log(`Auto-role configured: "${choice}" → ${role.id}`);
+    // -----------------------------------------------------------------
+    // BUTTONS
+    // -----------------------------------------------------------------
+    if (!interaction.isButton()) return;
 
-      return interaction.reply({ 
-        content: `✅ Users who choose **${choice}** will automatically receive the **${role.name}** role.`, 
-        ephemeral: true 
+    // All customIds are of the form:
+    // - ttrlopen|ft|<ftRoleId>|<reserveRoleId>
+    // - ttrlopen|res|<ftRoleId>|<reserveRoleId>
+    // - ttrlft|yes|<ftRoleId>|<reserveRoleId>
+    // - ttrlft|reserve|<ftRoleId>|<reserveRoleId>
+    // - ttrlft|leave|<ftRoleId>|<reserveRoleId>
+    // - ttrlres|ft|<ftRoleId>|<reserveRoleId>
+    // - ttrlres|stay|<ftRoleId>|<reserveRoleId>
+    // - ttrlres|leave|<ftRoleId>|<reserveRoleId>
+
+    const parts = interaction.customId.split('|');
+    const baseId = parts[0];          // ttrlopen / ttrlft / ttrlres
+    const actionOrType = parts[1];    // ft / res / yes / reserve / leave / stay
+    const ftRoleId = parts[2];        // actual FT role id
+    const reserveRoleId = parts[3];   // actual Reserve role id
+
+    const user = interaction.user;
+
+    // Ensure we have a full GuildMember
+    let member = interaction.member;
+    if (!member || !interaction.guild) {
+      try {
+        member = await interaction.guild.members.fetch(user.id);
+      } catch {
+        member = null;
+      }
+    }
+
+    if (!member) {
+      return interaction.reply({ content: "I couldn't load your server info. Please try again or contact an admin.", ephemeral: true });
+    }
+
+    const guildId = interaction.guildId;
+
+    // Server display name (nickname or username)
+    const displayName = member.displayName || user.username;
+
+    // How long in server (seasons & months)
+    const joinedTs = member.joinedTimestamp || Date.now();
+    const membershipText = formatMembership(joinedTs);
+
+    // Collect additional user data
+    const userId = user.id;
+    const accountCreated = user.createdAt.toISOString().split('T')[0];
+    const avatarUrl = user.displayAvatarURL({ dynamic: true, size: 256 });
+    const allRoles = member.roles.cache.map(r => r.name).filter(n => n !== '@everyone').join(', ') || 'None';
+    const boostStatus = member.premiumSince ? `Boosting since ${member.premiumSince.toISOString().split('T')[0]}` : 'Not boosting';
+    const joinDate = member.joinedAt ? member.joinedAt.toISOString().split('T')[0] : 'Unknown';
+
+    // Step 1 panel buttons: Current FT / Current Reserve
+    if (baseId === 'ttrlopen') {
+      const driverTypeKey = actionOrType; // 'ft' or 'res'
+      const isFT = member.roles.cache.has(ftRoleId);
+      const isReserve = member.roles.cache.has(reserveRoleId);
+
+      if (driverTypeKey === 'ft' && !isFT) {
+        return interaction.reply({ content: 'You clicked "Current Full Time Driver", but you don\'t have the FT driver role.', ephemeral: true });
+      }
+      if (driverTypeKey === 'res' && !isReserve) {
+        return interaction.reply({ content: 'You clicked "Current Reserve", but you don\'t have the Reserve driver role.', ephemeral: true });
+      }
+
+      let content;
+      let row;
+
+      if (driverTypeKey === 'ft') {
+        content = 'For current Drivers with a Full Time seat: Do you wish a FT seat for next season?';
+        row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`ttrlft|yes|${ftRoleId}|${reserveRoleId}`)
+            .setLabel('Yes, keep FT seat')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`ttrlft|reserve|${ftRoleId}|${reserveRoleId}`)
+            .setLabel('Move to Reserve')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`ttrlft|leave|${ftRoleId}|${reserveRoleId}`)
+            .setLabel('Leaving TTRL')
+            .setStyle(ButtonStyle.Danger)
+        );
+      } else {
+        content = 'For Reserve Drivers: What are you looking for next season?';
+        row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`ttrlres|ft|${ftRoleId}|${reserveRoleId}`)
+            .setLabel('Full Time seat')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId(`ttrlres|stay|${ftRoleId}|${reserveRoleId}`)
+            .setLabel('Stay as Reserve')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`ttrlres|leave|${ftRoleId}|${reserveRoleId}`)
+            .setLabel('Leaving TTRL')
+            .setStyle(ButtonStyle.Danger)
+        );
+      }
+
+      return interaction.reply({ content, components: [row], ephemeral: true });
+    }
+
+    // Step 2: final answer buttons
+    if (!baseId.startsWith('ttrl')) return;
+
+    // Before recording, check if this display name already submitted
+    try {
+      const already = await hasAlreadySubmitted(displayName);
+      if (already) {
+        return interaction.reply({
+          content: "You've already submitted your TTRL signup. If you need to change your answer, please contact an admin.",
+          ephemeral: true,
+        });
+      }
+    } catch (err) {
+      console.error('Error checking existing submissions:', err);
+      return interaction.reply({
+        content: "I had trouble checking your existing signup. Please try again later or contact an admin.",
+        ephemeral: true,
       });
     }
-    
-    return;
-  }
 
-  // -------------------------------------------------------------------
-  // BUTTONS
-  // -------------------------------------------------------------------
-  if (!interaction.isButton()) return;
+    let driverType = 'Unknown';
+    if (member.roles.cache.has(ftRoleId)) driverType = 'FT';
+    if (member.roles.cache.has(reserveRoleId)) driverType = 'Reserve';
 
-  // All customIds are of the form:
-  // - ttrlopen|ft|<ftRoleId>|<reserveRoleId>
-  // - ttrlopen|res|<ftRoleId>|<reserveRoleId>
-  // - ttrlft|yes|<ftRoleId>|<reserveRoleId>
-  // - ttrlft|reserve|<ftRoleId>|<reserveRoleId>
-  // - ttrlft|leave|<ftRoleId>|<reserveRoleId>
-  // - ttrlres|ft|<ftRoleId>|<reserveRoleId>
-  // - ttrlres|stay|<ftRoleId>|<reserveRoleId>
-  // - ttrlres|leave|<ftRoleId>|<reserveRoleId>
+    let currentRole = 'Unknown';
+    if (driverType === 'FT') currentRole = 'Full Time Driver';
+    else if (driverType === 'Reserve') currentRole = 'Reserve Driver';
 
-  const parts = interaction.customId.split('|');
-  const baseId = parts[0];          // ttrlopen / ttrlft / ttrlres
-  const actionOrType = parts[1];    // ft / res / yes / reserve / leave / stay / ft
-  const ftRoleId = parts[2];        // actual FT role id
-  const reserveRoleId = parts[3];   // actual Reserve role id
+    let choice;
 
-  const user = interaction.user;
+    if (baseId === 'ttrlft') {
+      const ftAction = actionOrType; // yes / reserve / leave
+      if (ftAction === 'yes') choice = 'Stay FT';
+      else if (ftAction === 'reserve') choice = 'Move to Reserve';
+      else if (ftAction === 'leave') choice = 'Leaving TTRL';
+    } else if (baseId === 'ttrlres') {
+      const resAction = actionOrType; // ft / stay / leave
+      if (resAction === 'ft') choice = 'Wants FT seat';
+      else if (resAction === 'stay') choice = 'Stay Reserve';
+      else if (resAction === 'leave') choice = 'Leaving TTRL';
+    }
 
-  // Ensure we have a full GuildMember
-  let member = interaction.member;
-  if (!member || !interaction.guild) {
     try {
-      member = await interaction.guild.members.fetch(user.id);
-    } catch {
-      member = null;
-    }
-  }
+      await logToSheet({
+        displayName,
+        username: user.username,
+        currentRole,
+        driverType,
+        choice,
+        timestamp: formatTimestamp(),
+        membershipText,
+        userId,
+        accountCreated,
+        avatarUrl,
+        allRoles,
+        boostStatus,
+        joinDate,
+      });
 
-  if (!member) {
-    return interaction.reply({ content: "I couldn't load your server info. Please try again or contact an admin.", ephemeral: true });
-  }
+      // Refresh summary in the configured stats channel for this guild
+      await updateSignupSummaryMessage(client, guildId);
 
-  const guildId = interaction.guildId;
+      // Apply auto-role if configured for this choice
+      if (autoRoleByChoice.has(choice)) {
+        const roleId = autoRoleByChoice.get(choice);
+        try {
+          await member.roles.add(roleId);
+          console.log(`✅ Auto-assigned role ${roleId} to ${displayName} for choice: ${choice}`);
+        } catch (roleErr) {
+          console.error(`❌ Failed to assign auto-role ${roleId}:`, roleErr.message);
+          // Don't fail the whole interaction if role assignment fails
+        }
+      } else {
+        console.log(`ℹ️ No auto-role configured for choice: ${choice}`);
+      }
 
-  // Server display name (nickname or username)
-  const displayName = member.displayName || user.username;
+      await interaction.reply({
+        content: "Thanks! I've recorded your TTRL signup choice. A confirmation has been sent to your DMs.",
+        ephemeral: true,
+      });
 
-  // How long in server (seasons & months)
-  const joinedTs = member.joinedTimestamp || Date.now();
-  const membershipText = formatMembership(joinedTs);
-
-  // Collect additional user data
-  const userId = user.id;
-  const accountCreated = user.createdAt.toISOString().split('T')[0];
-  const avatarUrl = user.displayAvatarURL({ dynamic: true, size: 256 });
-  const allRoles = member.roles.cache.map(r => r.name).filter(n => n !== '@everyone').join(', ') || 'None';
-  const boostStatus = member.premiumSince ? `Boosting since ${member.premiumSince.toISOString().split('T')[0]}` : 'Not boosting';
-  const joinDate = member.joinedAt ? member.joinedAt.toISOString().split('T')[0] : 'Unknown';
-
-  // Step 1 panel buttons: Current FT / Current Reserve
-  if (baseId === 'ttrlopen') {
-    const driverTypeKey = actionOrType; // 'ft' or 'res'
-    const isFT = member.roles.cache.has(ftRoleId);
-    const isReserve = member.roles.cache.has(reserveRoleId);
-
-    if (driverTypeKey === 'ft' && !isFT) {
-      return interaction.reply({ content: 'You clicked "Current Full Time Driver", but you don\'t have the FT driver role.', ephemeral: true });
-    }
-    if (driverTypeKey === 'res' && !isReserve) {
-      return interaction.reply({ content: 'You clicked "Current Reserve", but you don\'t have the Reserve driver role.', ephemeral: true });
-    }
-
-    let content;
-    let row;
-
-    if (driverTypeKey === 'ft') {
-      content = 'For current Drivers with a Full Time seat: Do you wish a FT seat for next season?';
-      row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`ttrlft|yes|${ftRoleId}|${reserveRoleId}`)
-          .setLabel('Yes, keep FT seat')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`ttrlft|reserve|${ftRoleId}|${reserveRoleId}`)
-          .setLabel('Move to Reserve')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`ttrlft|leave|${ftRoleId}|${reserveRoleId}`)
-          .setLabel('Leaving TTRL')
-          .setStyle(ButtonStyle.Danger)
-      );
-    } else {
-      content = 'For Reserve Drivers: What are you looking for next season?';
-      row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`ttrlres|ft|${ftRoleId}|${reserveRoleId}`)
-          .setLabel('Full Time seat')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`ttrlres|stay|${ftRoleId}|${reserveRoleId}`)
-          .setLabel('Stay as Reserve')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`ttrlres|leave|${ftRoleId}|${reserveRoleId}`)
-          .setLabel('Leaving TTRL')
-          .setStyle(ButtonStyle.Danger)
-      );
-    }
-
-    return interaction.reply({ content, components: [row], ephemeral: true });
-  }
-
-  // Step 2: final answer buttons
-  if (!baseId.startsWith('ttrl')) return;
-
-  // Before recording, check if this display name already submitted
-  try {
-    const already = await hasAlreadySubmitted(displayName);
-    if (already) {
-      return interaction.reply({
-        content: "You've already submitted your TTRL signup. If you need to change your answer, please contact an admin.",
+      try {
+        await user.send('Thank you, your TTRL signup request has been received.');
+      } catch (dmErr) {
+        console.error('Could not send DM to user:', dmErr.message);
+      }
+    } catch (err) {
+      console.error('Error logging to sheet:', err);
+      await interaction.reply({
+        content: "I couldn't save your answer to the signup sheet. Please ping an admin.",
         ephemeral: true,
       });
     }
   } catch (err) {
-    console.error('Error checking existing submissions:', err);
-    return interaction.reply({
-      content: "I had trouble checking your existing signup. Please try again later or contact an admin.",
-      ephemeral: true,
-    });
-  }
-
-  let driverType = 'Unknown';
-  if (member.roles.cache.has(ftRoleId)) driverType = 'FT';
-  if (member.roles.cache.has(reserveRoleId)) driverType = 'Reserve';
-
-  let currentRole = 'Unknown';
-  if (driverType === 'FT') currentRole = 'Full Time Driver';
-  else if (driverType === 'Reserve') currentRole = 'Reserve Driver';
-
-  let choice;
-
-  if (baseId === 'ttrlft') {
-    const ftAction = actionOrType; // yes / reserve / leave
-    if (ftAction === 'yes') choice = 'Stay FT';
-    else if (ftAction === 'reserve') choice = 'Move to Reserve';
-    else if (ftAction === 'leave') choice = 'Leaving TTRL';
-  } else if (baseId === 'ttrlres') {
-    const resAction = actionOrType; // ft / stay / leave
-    if (resAction === 'ft') choice = 'Wants FT seat';
-    else if (resAction === 'stay') choice = 'Stay Reserve';
-    else if (resAction === 'leave') choice = 'Leaving TTRL';
-  }
-
-  try {
-    await logToSheet({
-      displayName,
-      username: user.username,
-      currentRole,
-      driverType,
-      choice,
-      timestamp: formatTimestamp(),
-      membershipText,
-      userId,
-      accountCreated,
-      avatarUrl,
-      allRoles,
-      boostStatus,
-      joinDate,
-    });
-
-    // Refresh summary in the configured stats channel for this guild
-    await updateSignupSummaryMessage(client, guildId);
-
-    // Apply auto-role if configured for this choice
-    if (autoRoleByChoice.has(choice)) {
-      const roleId = autoRoleByChoice.get(choice);
-      try {
-        await member.roles.add(roleId);
-        console.log(`✅ Auto-assigned role ${roleId} to ${displayName} for choice: ${choice}`);
-      } catch (roleErr) {
-        console.error(`❌ Failed to assign auto-role ${roleId}:`, roleErr.message);
-        // Don't fail the whole interaction if role assignment fails
-      }
-    } else {
-      console.log(`ℹ️ No auto-role configured for choice: ${choice}`);
-    }
-
-    await interaction.reply({
-      content: "Thanks! I've recorded your TTRL signup choice. A confirmation has been sent to your DMs.",
-      ephemeral: true,
-    });
-
+    console.error('Unhandled error in InteractionCreate handler:', err);
     try {
-      await user.send('Thank you, your TTRL signup request has been received.');
-    } catch (dmErr) {
-      console.error('Could not send DM to user:', dmErr.message);
+      if (interaction.isRepliable()) {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.followUp({
+            content: 'Something went wrong handling that interaction.',
+            ephemeral: true,
+          });
+        } else {
+          await interaction.reply({
+            content: 'Something went wrong handling that interaction.',
+            ephemeral: true,
+          });
+        }
+      }
+    } catch (replyErr) {
+      console.error('Failed to reply after error:', replyErr);
     }
-  } catch (err) {
-    console.error('Error logging to sheet:', err);
-    await interaction.reply({
-      content: "I couldn't save your answer to the signup sheet. Please ping an admin.",
-      ephemeral: true,
-    });
   }
 });
 
