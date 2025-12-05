@@ -1,4 +1,4 @@
-// Updated: 2025-12-05
+// Updated: 2025-12-05 (flexible option names)
 require('dotenv').config();
 const {
   Client,
@@ -246,15 +246,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return interaction.reply({ content: 'Only admins can post the TTRL signup panel.', ephemeral: true });
         }
 
-        // SAFE access (no "true" second arg)
-        const ftRole = interaction.options.getRole('ftrole');
-        const reserveRole = interaction.options.getRole('reserverole');
-        const statsChannel = interaction.options.getChannel('statschannel');
+        // Try by name first
+        let ftRole = interaction.options.getRole('ftrole');
+        let reserveRole = interaction.options.getRole('reserverole');
+        let statsChannel = interaction.options.getChannel('statschannel');
+
+        // Fallback: infer from options (first 2 roles, first channel)
+        const hoisted = interaction.options._hoistedOptions || [];
+        const roleOpts = hoisted.filter(o => o.role).map(o => o.role);
+        const chanOpts = hoisted.filter(o => o.channel).map(o => o.channel);
+
+        if (!ftRole && roleOpts[0]) ftRole = roleOpts[0];
+        if (!reserveRole && roleOpts[1]) reserveRole = roleOpts[1];
+        if (!statsChannel && chanOpts[0]) statsChannel = chanOpts[0];
 
         if (!ftRole || !reserveRole || !statsChannel) {
+          console.log('ttrl-signup options debug:', hoisted.map(o => ({
+            name: o.name,
+            hasRole: !!o.role,
+            hasChannel: !!o.channel,
+            value: o.value,
+            type: o.type
+          })));
           return interaction.reply({
             content:
-              'This command appears to be misconfigured. Please make sure it has options named **ftrole**, **reserverole**, and **statschannel**.',
+              'This command appears to be misconfigured. It should have **two role options** (FT and Reserve) and **one channel option** (stats channel).',
             ephemeral: true,
           });
         }
@@ -329,10 +345,36 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return interaction.reply({ content: 'Only admins can configure auto-roles.', ephemeral: true });
         }
 
-        const choice = interaction.options.getString('choice', true);
-        const role = interaction.options.getRole('role'); // optional
+        // Try canonical names
+        let choice = interaction.options.getString('choice');
+        let role = interaction.options.getRole('role');
+
+        // Fallback: infer from options
+        const hoisted = interaction.options._hoistedOptions || [];
+        if (!choice) {
+          const strOpt = hoisted.find(o => typeof o.value === 'string' && !o.role && !o.channel);
+          if (strOpt) choice = strOpt.value;
+        }
+        if (!role) {
+          const rOpt = hoisted.find(o => o.role);
+          if (rOpt) role = rOpt.role;
+        }
+
+        if (!choice) {
+          console.log('ttrl-set-autorole options debug:', hoisted.map(o => ({
+            name: o.name,
+            hasRole: !!o.role,
+            value: o.value,
+            type: o.type
+          })));
+          return interaction.reply({
+            content: 'This command is missing a **string** option for the choice text.',
+            ephemeral: true,
+          });
+        }
 
         if (!role) {
+          // No role = disable mapping
           autoRoleByChoice.delete(choice);
           return interaction.reply({ 
             content: `✅ Automatic role assignment **disabled** for: **${choice}**`, 
