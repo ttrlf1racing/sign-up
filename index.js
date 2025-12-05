@@ -28,7 +28,10 @@ const autoRoleByChoice = new Map();
 console.log('GOOGLE ENV:');
 console.log('  GOOGLE_SPREADSHEET_ID:', SPREADSHEET_ID);
 console.log('  GOOGLE_CLIENT_EMAIL:', process.env.GOOGLE_CLIENT_EMAIL);
-console.log('  GOOGLE_PRIVATE_KEY length:', process.env.GOOGLE_PRIVATE_KEY ? process.env.GOOGLE_PRIVATE_KEY.length : 'MISSING');
+console.log(
+  '  GOOGLE_PRIVATE_KEY length:',
+  process.env.GOOGLE_PRIVATE_KEY ? process.env.GOOGLE_PRIVATE_KEY.length : 'MISSING'
+);
 
 const googleAuth = new google.auth.GoogleAuth({
   credentials: {
@@ -81,7 +84,7 @@ async function hasAlreadySubmitted(displayName) {
     spreadsheetId: SPREADSHEET_ID,
     range: 'Sheet1!B:B',
   });
-  const rows = res.data.values;
+  const rows = res.data.values || [];
   return rows.some(row => row[0] === displayName);
 }
 
@@ -92,7 +95,7 @@ async function getSignupSummaryFromSheets() {
     spreadsheetId: SPREADSHEET_ID,
     range: 'Sheet1!E:M',
   });
-  const rows = res.data.values;
+  const rows = res.data.values || [];
 
   let startIndex = 0;
   if (rows.length && rows[0][0] === 'Driver Type') {
@@ -301,7 +304,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     
     // Command: /ttrl-set-autorole
-  else if (interaction.commandName === 'ttrl-set-autorole') {
+    else if (interaction.commandName === 'ttrl-set-autorole') {
       if (!interaction.inGuild()) {
         return interaction.reply({ content: 'Use this command in a server channel.', ephemeral: true });
       }
@@ -328,6 +331,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       autoRoleByChoice.set(choice, role.id);
+      console.log(`Auto-role configured: "${choice}" → ${role.id}`);
+
       return interaction.reply({ 
         content: `✅ Users who choose **${choice}** will automatically receive the **${role.name}** role.`, 
         ephemeral: true 
@@ -336,12 +341,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
     
     return;
   }
+
   // -------------------------------------------------------------------
   // BUTTONS
   // -------------------------------------------------------------------
   if (!interaction.isButton()) return;
 
-  const [baseId, ftRoleId, reserveRoleId] = interaction.customId.split('|');
+  // All customIds are of the form:
+  // - ttrlopen|ft|<ftRoleId>|<reserveRoleId>
+  // - ttrlopen|res|<ftRoleId>|<reserveRoleId>
+  // - ttrlft|yes|<ftRoleId>|<reserveRoleId>
+  // - ttrlft|reserve|<ftRoleId>|<reserveRoleId>
+  // - ttrlft|leave|<ftRoleId>|<reserveRoleId>
+  // - ttrlres|ft|<ftRoleId>|<reserveRoleId>
+  // - ttrlres|stay|<ftRoleId>|<reserveRoleId>
+  // - ttrlres|leave|<ftRoleId>|<reserveRoleId>
+
+  const parts = interaction.customId.split('|');
+  const baseId = parts[0];          // ttrlopen / ttrlft / ttrlres
+  const actionOrType = parts[1];    // ft / res / yes / reserve / leave / stay / ft
+  const ftRoleId = parts[2];        // actual FT role id
+  const reserveRoleId = parts[3];   // actual Reserve role id
+
   const user = interaction.user;
 
   // Ensure we have a full GuildMember
@@ -377,7 +398,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   // Step 1 panel buttons: Current FT / Current Reserve
   if (baseId === 'ttrlopen') {
-    const [, driverTypeKey] = interaction.customId.split('|');
+    const driverTypeKey = actionOrType; // 'ft' or 'res'
     const isFT = member.roles.cache.has(ftRoleId);
     const isReserve = member.roles.cache.has(reserveRoleId);
 
@@ -457,21 +478,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
   else if (driverType === 'Reserve') currentRole = 'Reserve Driver';
 
   let choice;
-  switch (baseId) {
-    case 'ttrlft':
-      const [, ftAction] = interaction.customId.split('|');
-      if (ftAction === 'yes') choice = 'Stay FT';
-      else if (ftAction === 'reserve') choice = 'Move to Reserve';
-      else if (ftAction === 'leave') choice = 'Leaving TTRL';
-      break;
-    case 'ttrlres':
-      const [, resAction] = interaction.customId.split('|');
-      if (resAction === 'ft') choice = 'Wants FT seat';
-      else if (resAction === 'stay') choice = 'Stay Reserve';
-      else if (resAction === 'leave') choice = 'Leaving TTRL';
-      break;
-    default:
-      choice = 'Unknown';
+
+  if (baseId === 'ttrlft') {
+    const ftAction = actionOrType; // yes / reserve / leave
+    if (ftAction === 'yes') choice = 'Stay FT';
+    else if (ftAction === 'reserve') choice = 'Move to Reserve';
+    else if (ftAction === 'leave') choice = 'Leaving TTRL';
+  } else if (baseId === 'ttrlres') {
+    const resAction = actionOrType; // ft / stay / leave
+    if (resAction === 'ft') choice = 'Wants FT seat';
+    else if (resAction === 'stay') choice = 'Stay Reserve';
+    else if (resAction === 'leave') choice = 'Leaving TTRL';
   }
 
   try {
@@ -504,6 +521,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error(`❌ Failed to assign auto-role ${roleId}:`, roleErr.message);
         // Don't fail the whole interaction if role assignment fails
       }
+    } else {
+      console.log(`ℹ️ No auto-role configured for choice: ${choice}`);
     }
 
     await interaction.reply({
