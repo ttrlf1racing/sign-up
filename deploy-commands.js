@@ -38,7 +38,12 @@ const commands = [
         .setDescription('Role to assign (leave empty to disable auto-role for this choice)')
         .setRequired(false)),
 
-  // NEW: /ttrl-timetrial
+  // NEW: /ttrl-tt-panel (admin posts TT info + button)
+  new SlashCommandBuilder()
+    .setName('ttrl-tt-panel')
+    .setDescription('Post the Time Trial info & button (admin only)'),
+
+  // Existing: /ttrl-timetrial (drivers submit TT times)
   new SlashCommandBuilder()
     .setName('ttrl-timetrial')
     .setDescription('Submit Time Trial lap times for Bahrain, Austria and Silverstone')
@@ -68,8 +73,17 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
       ),
       { body: commands }
     );
+
+    const registered = await rest.get(
+      Routes.applicationGuildCommands(
+        process.env.DISCORD_CLIENT_ID,
+        process.env.DISCORD_GUILD_ID
+      )
+    );
+    console.log('Registered commands:', registered.map(c => c.name));
+
     console.log('Successfully registered application commands.');
   } catch (error) {
-    console.error(error);
+    console.error('Deploy error:', error);
   }
 })();
