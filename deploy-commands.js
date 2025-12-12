@@ -17,7 +17,7 @@ const commands = [
       option.setName('statschannel')
         .setDescription('Channel to post & update the signup summary')
         .setRequired(true)),
-  
+
   new SlashCommandBuilder()
     .setName('ttrl-set-autorole')
     .setDescription('Set automatic role assignment for signup choices (optional)')
@@ -36,6 +36,23 @@ const commands = [
     .addRoleOption(option =>
       option.setName('role')
         .setDescription('Role to assign (leave empty to disable auto-role for this choice)')
+        .setRequired(false)),
+
+  // NEW: /ttrl-timetrial
+  new SlashCommandBuilder()
+    .setName('ttrl-timetrial')
+    .setDescription('Submit Time Trial lap times for Bahrain, Austria and Silverstone')
+    .addStringOption(option =>
+      option.setName('bahrain')
+        .setDescription('Bahrain lap time (mm:ss.mmm)')
+        .setRequired(false))
+    .addStringOption(option =>
+      option.setName('austria')
+        .setDescription('Austria lap time (mm:ss.mmm)')
+        .setRequired(false))
+    .addStringOption(option =>
+      option.setName('silverstone')
+        .setDescription('Silverstone lap time (mm:ss.mmm)')
         .setRequired(false))
 ].map(command => command.toJSON());
 
