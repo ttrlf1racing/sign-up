@@ -67,8 +67,8 @@ function formatMembership(joinedTimestamp) {
 
   if (years === 0 && months === 0) return "<1m";
   if (years === 0) return `${months}m`;
-  if (months === 0) return `${years} seasons`;
-  return `${years} seasons ${months}m`;
+  if (months === 0) return `${years} years`;
+  return `${years} Years ${months}m`;
 }
 
 async function hasAlreadySubmitted(name) {
