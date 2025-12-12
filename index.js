@@ -1,5 +1,5 @@
 // ====================================================================
-//  TTRL SIGNUP BOT - FULL UPDATED VERSION (2025-12-05)
+//  TTRL SIGNUP BOT - FULL UPDATED VERSION (2025-12-12)
 // ====================================================================
 
 require('dotenv').config();
@@ -184,7 +184,7 @@ async function updateSignupSummaryMessage(client, guildId) {
 
 
 // ---------------------------------------------------------------------
-// LOG TO SHEET
+// LOG TO SHEETS
 // ---------------------------------------------------------------------
 
 async function logToSheet(entry) {
@@ -213,6 +213,26 @@ async function logToSheet(entry) {
   });
 }
 
+// NEW: Time Trials logging helper (new sheet "TimeTrials")
+async function logTimeTrialToSheet(entry) {
+  const sheets = await getSheetsClient();
+  const values = [[
+    entry.timestamp,
+    entry.displayName,
+    entry.username,
+    entry.userId,
+    entry.bahrainTime || "",
+    entry.austriaTime || "",
+    entry.silverstoneTime || ""
+  ]];
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: "TimeTrials!A:G", // make sure sheet "TimeTrials" exists
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values }
+  });
+}
 
 
 // =====================================================================
@@ -226,8 +246,6 @@ const client = new Client({
 client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);
 });
-
-
 // =====================================================================
 // INTERACTIONS
 // =====================================================================
@@ -287,7 +305,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
         }
 
-        // EMBED WITH RESTORED FORMATTING
         const embed = new EmbedBuilder()
           .setTitle("TTRL Sign-Up Process")
           .setDescription([
@@ -321,7 +338,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         return;
       }
-
 
       // ===============================================================
       // /ttrl-set-autorole
@@ -371,6 +387,78 @@ client.on(Events.InteractionCreate, async (interaction) => {
           content: `Users selecting **${choice}** will now receive **${role.name}** automatically.`,
           ephemeral: true
         });
+      }
+
+      // ===============================================================
+      // /ttrl-timetrial (NEW)
+//      ===============================================================
+      if (interaction.commandName === "ttrl-timetrial") {
+        if (!interaction.inGuild()) {
+          return interaction.reply({ content: "Use this in a server.", ephemeral: true });
+        }
+
+        const bahrainTime = interaction.options.getString("bahrain");
+        const austriaTime = interaction.options.getString("austria");
+        const silverstoneTime = interaction.options.getString("silverstone");
+
+        // at least one track required
+        if (!bahrainTime && !austriaTime && !silverstoneTime) {
+          return interaction.reply({
+            content: "Please provide at least one lap time. Format: **mm:ss.mmm** (e.g. 01:28.432).",
+            ephemeral: true
+          });
+        }
+
+        // Validate time format: mm:ss.mmm
+        function validateTime(timeStr) {
+          const timeRegex = /^(\d{1,2}):(\d{2})\.(\d{3})$/;
+          return timeRegex.test(timeStr);
+        }
+
+        const times = {
+          Bahrain: bahrainTime,
+          Austria: austriaTime,
+          Silverstone: silverstoneTime
+        };
+
+        const invalidTimes = Object.entries(times)
+          .filter(([track, time]) => time && !validateTime(time));
+
+        if (invalidTimes.length > 0) {
+          const invalidList = invalidTimes.map(([track]) => `**${track}**`).join(", ");
+          return interaction.reply({
+            content: `Invalid time format for ${invalidList}. Use **mm:ss.mmm** (e.g. 01:28.432).`,
+            ephemeral: true
+          });
+        }
+
+        const member = interaction.member;
+        const displayName = member.displayName || interaction.user.username;
+        const userId = interaction.user.id;
+        const timestamp = formatTimestamp();
+
+        await logTimeTrialToSheet({
+          timestamp,
+          displayName,
+          username: interaction.user.username,
+          userId,
+          bahrainTime,
+          austriaTime,
+          silverstoneTime
+        });
+
+        const submittedTimes = [
+          bahrainTime ? `**Bahrain:** ${bahrainTime}` : "",
+          austriaTime ? `**Austria:** ${austriaTime}` : "",
+          silverstoneTime ? `**Silverstone:** ${silverstoneTime}` : ""
+        ].filter(Boolean).join("\n");
+
+        await interaction.reply({
+          content: `✅ Time trial times recorded for **${displayName}**!\n\n${submittedTimes}`,
+          ephemeral: true
+        });
+
+        return;
       }
 
       return;
@@ -516,4 +604,3 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // LOGIN
 // =====================================================================
 client.login(process.env.DISCORD_TOKEN);
-
