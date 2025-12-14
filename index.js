@@ -249,8 +249,38 @@ client.once(Events.ClientReady, (c) => {
 // =====================================================================
 // INTERACTIONS
 // =====================================================================
+Put it at the very top of your existing `InteractionCreate` handler, right after this line:
+
+```js
 client.on(Events.InteractionCreate, async (interaction) => {
+```
+
+So change that whole block header to:
+
+```js
+client.on(Events.InteractionCreate, async (interaction) => {
+  console.log("INTERACTION DEBUG:", {
+    type: interaction.type,
+    isChatInput: interaction.isChatInputCommand(),
+    isButton: interaction.isButton(),
+    commandName: interaction.isChatInputCommand() ? interaction.commandName : null,
+    customId: interaction.isButton() ? interaction.customId : null,
+    user: interaction.user?.tag,
+  });
+
   try {
+
+    // =================================================================
+    // SLASH COMMANDS
+    // =================================================================
+    if (interaction.isChatInputCommand()) {
+      // ... rest of your existing code ...
+```
+
+Do not change anything else in the file. Push to GitHub, let Railway redeploy, then watch the **live Logs** tab while you run `/ttrl-tt-panel` and click the button; the new `INTERACTION DEBUG` lines will tell us whether the handler is firing and with what data.[1][2]
+
+[1](https://community.latenode.com/t/why-isnt-my-javascript-discord-bot-responding-to-slash-commands/8025)
+[2](https://github.com/discordjs/discord.js/issues/6479)
 
     // =================================================================
     // SLASH COMMANDS
