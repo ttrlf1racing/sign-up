@@ -471,13 +471,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const botMember = await interaction.guild.members.fetchMe();
           const botPosition = botMember.roles.highest.position;
 
-          // Remove each manageable role individually
           const rolesToRemove = member.roles.cache.filter(r =>
-            r.id !== interaction.guild.id &&          // not @everyone
-            r.id !== leavingRoleId &&                 // not Leaving
-            r.position < botPosition                  // below bot
-          );
-
+  r.id !== interaction.guild.id &&          // not @everyone
+  r.id !== leavingRoleId &&                 // do NOT remove Leaving role
+  r.position < botPosition                  // below bot
+);
           for (const [, role] of rolesToRemove) {
             try {
               await member.roles.remove(role);
