@@ -67,8 +67,8 @@ function formatMembership(joinedTimestamp) {
 
   if (years === 0 && months === 0) return "<1m";
   if (years === 0) return `${months}m`;
-  if (months === 0) return `${years} seasons`;
-  return `${years} seasons ${months}m`;
+  if (months === 0) return `${years} Years`;
+  return `${years} Years ${months}m`;
 }
 
 async function hasAlreadySubmitted(name) {
@@ -189,24 +189,23 @@ async function updateSignupSummaryMessage(client, guildId) {
 async function logToSheet(entry) {
   const sheets = await getSheetsClient();
   const values = [[
-    entry.timestamp,
-    entry.displayName,
-    entry.username,
-    entry.currentRole,
-    entry.driverType,
-    entry.membershipText,
-    entry.userId,
-    entry.accountCreated,
-    entry.avatarUrl,
-    entry.allRoles,
-    entry.boostStatus,
-    entry.joinDate,
-    entry.choice
+    entry.timestamp,        // A
+    entry.displayName,      // B
+    entry.username,         // C
+    entry.currentRole,      // D (top role)
+    entry.choice,           // E
+    entry.membershipText,   // F
+    entry.joinDate,         // G
+    entry.userId,           // H
+    entry.accountCreated,   // I
+    entry.avatarUrl,        // J
+    entry.allRoles,         // K
+    entry.boostStatus       // L
   ]];
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!A:M",
+    range: "Sheet1!A:L",
     valueInputOption: "USER_ENTERED",
     requestBody: { values }
   });
@@ -253,13 +252,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return interaction.reply({ content: "Admins only.", ephemeral: true });
         }
 
-        // Try canonical names
+        // Channel option for stats
         let statsChannel = interaction.options.getChannel("statschannel");
 
-        // Fallback: detect automatically
         const hoisted = interaction.options._hoistedOptions ?? [];
         const chanOptions = hoisted.filter(o => o.channel).map(o => o.channel);
-
         if (!statsChannel && chanOptions[0]) statsChannel = chanOptions[0];
 
         if (!statsChannel) {
@@ -317,7 +314,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         return;
       }
-
 
       // ===============================================================
       // /ttrl-set-autorole (unchanged)
@@ -403,24 +399,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    const currentRole = "Driver";
-    const driverType = "Unknown";
+    // Highest role (excluding @everyone)
+    const topRole = member.roles.highest && member.roles.highest.id !== interaction.guild.id
+      ? member.roles.highest.name
+      : "None";
+
+    const currentRole = topRole;
     const choice = choiceLabel; // "Full Time Seat" | "Reserve Seat" | "Leaving TTRL"
 
     await logToSheet({
       displayName,
       username: user.username,
       currentRole,
-      driverType,
       choice,
       timestamp: formatTimestamp(),
       membershipText,
+      joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
       userId: member.id,
       accountCreated: member.user.createdAt.toISOString().split("T")[0],
       avatarUrl: member.user.displayAvatarURL({ size: 256 }),
       allRoles: member.roles.cache.map(r => r.name).filter(n => n !== "@everyone").join(", ") || "None",
-      boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting",
-      joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown"
+      boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting"
     });
 
     await updateSignupSummaryMessage(client, interaction.guildId);
