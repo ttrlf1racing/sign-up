@@ -1,5 +1,5 @@
 // ====================================================================
-//  TTRL SIGNUP BOT - UPDATED SHEET + LEAVING CONFIRM
+//  TTRL SIGNUP BOT - FINAL VERSION
 // ====================================================================
 
 require('dotenv').config();
@@ -400,7 +400,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     // -----------------------------------------------------------------
-    // 3) All confirmed choices (including confirmed Leaving)
+    // 3) DEFER IMMEDIATELY (before any async operations)
     // -----------------------------------------------------------------
     await interaction.deferReply({ flags: 64 });
 
@@ -425,51 +425,50 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // ...after deferReply, member fetch, duplicate check...
+    // -----------------------------------------------------------------
+    // CAPTURE ROLES *BEFORE* ANY CHANGES
+    // -----------------------------------------------------------------
+    const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
 
-const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
+    const tierRolesArr = rolesExcludingEveryone
+      .filter(r => r.name.startsWith("Tier"))
+      .map(r => r.name);
 
-// Choice: either Full Time Seat / Reserve Seat / Leaving TTRL
-const choice = choiceLabel;
+    const realisticRolesArr = rolesExcludingEveryone
+      .filter(r => r.name.startsWith("Realistic"))
+      .map(r => r.name);
 
-// Always capture Tier / Realistic from current roles (before any removals)
-const tierRolesArr = rolesExcludingEveryone
-  .filter(r => r.name.startsWith("Tier"))
-  .map(r => r.name);
+    const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
+    const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
 
-const realisticRolesArr = rolesExcludingEveryone
-  .filter(r => r.name.startsWith("Realistic"))
-  .map(r => r.name);
+    const choice = choiceLabel;
 
-const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
-const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
+    // -----------------------------------------------------------------
+    // LOG TO SHEET *BEFORE* ROLE CHANGES
+    // -----------------------------------------------------------------
+    await logToSheet({
+      displayName,
+      username: user.username,
+      tierRoles,          // D - captured above
+      realisticRoles,     // E - captured above
+      choice,             // F
+      timestamp: formatTimestamp(),
+      membershipText,
+      joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
+      userId: member.id,
+      accountCreated: member.user.createdAt.toISOString().split("T")[0],
+      avatarUrl: member.user.displayAvatarURL({ size: 256 }),
+      allRoles: rolesExcludingEveryone.map(r => r.name).join(", ") || "None",
+      boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting"
+    });
 
-await logToSheet({
-  displayName,
-  username: user.username,
-  tierRoles,          // D
-  realisticRoles,     // E
-  choice,             // F
-  timestamp: formatTimestamp(),
-  membershipText,
-  joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
-  userId: member.id,
-  accountCreated: member.user.createdAt.toISOString().split("T")[0],
-  avatarUrl: member.user.displayAvatarURL({ size: 256 }),
-  allRoles: rolesExcludingEveryone.map(r => r.name).join(", ") || "None",
-  boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting"
-});
-
-
-// NOW do the Leaving role cleanup
-if (choice === "Leaving TTRL" && state === "confirm") {
-  // per-role remove + add Leaving role (your current block)
-}
     await updateSignupSummaryMessage(client, interaction.guildId);
 
     // -----------------------------------------------------------------
-    // 4) Apply Leaving roles (confirmed only) – per-role remove/add
+    // NOW MODIFY ROLES (after logging is complete)
     // -----------------------------------------------------------------
+
+    // Apply Leaving roles (confirmed only)
     if (choice === "Leaving TTRL" && state === "confirm") {
       const leavingRoleId = "1460986192966455449";
       const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
@@ -481,11 +480,13 @@ if (choice === "Leaving TTRL" && state === "confirm") {
           const botMember = await interaction.guild.members.fetchMe();
           const botPosition = botMember.roles.highest.position;
 
+          // Remove each manageable role individually (except @everyone and Leaving)
           const rolesToRemove = member.roles.cache.filter(r =>
-  r.id !== interaction.guild.id &&          // not @everyone
-  r.id !== leavingRoleId &&                 // do NOT remove Leaving role
-  r.position < botPosition                  // below bot
-);
+            r.id !== interaction.guild.id &&          // not @everyone
+            r.id !== leavingRoleId &&                 // do NOT remove Leaving role
+            r.position < botPosition                  // below bot
+          );
+
           for (const [, role] of rolesToRemove) {
             try {
               await member.roles.remove(role);
@@ -510,9 +511,7 @@ if (choice === "Leaving TTRL" && state === "confirm") {
       }
     }
 
-    // -----------------------------------------------------------------
-    // 5) Optional auto-role based on choice (for non-leaving choices)
-    // -----------------------------------------------------------------
+    // Optional auto-role based on choice (for non-leaving choices)
     if (choice !== "Leaving TTRL" && autoRoleByChoice.has(choice)) {
       const roleId = autoRoleByChoice.get(choice);
       try { await member.roles.add(roleId); }
