@@ -166,7 +166,7 @@ async function updateSignupSummaryMessage(client, guildId) {
 }
 
 // ---------------------------------------------------------------------
-// LOG TO SHEET – new layout A:L
+// LOG TO SHEET – layout A:L
 // ---------------------------------------------------------------------
 
 async function logToSheet(entry) {
@@ -447,27 +447,45 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await updateSignupSummaryMessage(client, interaction.guildId);
 
     // -----------------------------------------------------------------
-    // 4) Apply Leaving roles (confirmed only)
+    // 4) Apply Leaving roles (confirmed only) - safe version
     // -----------------------------------------------------------------
     if (choice === "Leaving TTRL" && state === "confirm") {
       const leavingRoleId = "1460986192966455449";
       const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
 
-      if (leavingRole) {
-        try {
-          // Keep only @everyone and the Leaving role
-          await member.roles.set([interaction.guild.id, leavingRoleId]);
-        } catch (err) {
-          console.error("Failed to set roles for Leaving TTRL:", err);
-        }
-      } else {
+      if (!leavingRole) {
         console.error("Leaving role not found in guild:", leavingRoleId);
+      } else {
+        try {
+          // Bot's own role position
+          const botMember = await interaction.guild.members.fetchMe();
+          const botPosition = botMember.roles.highest.position;
+
+          // Remove all roles the bot can manage (not @everyone, below bot)
+          const rolesToRemove = member.roles.cache.filter(r =>
+            r.id !== interaction.guild.id &&
+            r.position < botPosition
+          );
+
+          if (rolesToRemove.size > 0) {
+            await member.roles.remove(rolesToRemove);
+          }
+
+          // Add Leaving role if bot can manage it
+          if (leavingRole.position < botPosition) {
+            await member.roles.add(leavingRole);
+          } else {
+            console.error("Bot cannot manage Leaving role (position too high).");
+          }
+        } catch (err) {
+          console.error("Failed to update roles for Leaving TTRL:", err);
+        }
       }
     }
 
     // -----------------------------------------------------------------
     // 5) Optional auto-role based on choice (for non-leaving choices)
-// -----------------------------------------------------------------
+    // -----------------------------------------------------------------
     if (choice !== "Leaving TTRL" && autoRoleByChoice.has(choice)) {
       const roleId = autoRoleByChoice.get(choice);
       try { await member.roles.add(roleId); }
