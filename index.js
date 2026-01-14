@@ -425,36 +425,42 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
+    // ...after deferReply, member fetch, duplicate check...
 
-    const tierRolesArr = rolesExcludingEveryone
-      .filter(r => r.name.startsWith("Tier"))
-      .map(r => r.name);
-    const realisticRolesArr = rolesExcludingEveryone
-      .filter(r => r.name.startsWith("Realistic"))
-      .map(r => r.name);
+const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
 
-    const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
-    const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
+const tierRolesArr = rolesExcludingEveryone
+  .filter(r => r.name.startsWith("Tier"))
+  .map(r => r.name);
+const realisticRolesArr = rolesExcludingEveryone
+  .filter(r => r.name.startsWith("Realistic"))
+  .map(r => r.name);
 
-    const choice = choiceLabel;
+const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
+const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
 
-    await logToSheet({
-      displayName,
-      username: user.username,
-      tierRoles,
-      realisticRoles,
-      choice,
-      timestamp: formatTimestamp(),
-      membershipText,
-      joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
-      userId: member.id,
-      accountCreated: member.user.createdAt.toISOString().split("T")[0],
-      avatarUrl: member.user.displayAvatarURL({ size: 256 }),
-      allRoles: rolesExcludingEveryone.map(r => r.name).join(", ") || "None",
-      boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting"
-    });
+const choice = choiceLabel;
 
+await logToSheet({
+  displayName,
+  username: user.username,
+  tierRoles,
+  realisticRoles,
+  choice,
+  timestamp: formatTimestamp(),
+  membershipText,
+  joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
+  userId: member.id,
+  accountCreated: member.user.createdAt.toISOString().split("T")[0],
+  avatarUrl: member.user.displayAvatarURL({ size: 256 }),
+  allRoles: rolesExcludingEveryone.map(r => r.name).join(", ") || "None",
+  boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting"
+});
+
+// NOW do the Leaving role cleanup
+if (choice === "Leaving TTRL" && state === "confirm") {
+  // per-role remove + add Leaving role (your current block)
+}
     await updateSignupSummaryMessage(client, interaction.guildId);
 
     // -----------------------------------------------------------------
