@@ -1,5 +1,5 @@
 // ====================================================================
-//  TTRL SIGNUP BOT - FULL UPDATED VERSION (2026-01-14)
+//  TTRL SIGNUP BOT - UPDATED FOR NEW SHEET LAYOUT
 // ====================================================================
 
 require('dotenv').config();
@@ -49,7 +49,6 @@ async function getSheetsClient() {
   return google.sheets({ version: "v4", auth: authClient });
 }
 
-
 // ---------------------------------------------------------------------
 // HELPERS
 // ---------------------------------------------------------------------
@@ -59,6 +58,7 @@ function formatTimestamp(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+// Membership text, using “Years”.
 function formatMembership(joinedTimestamp) {
   const diffMs = Date.now() - joinedTimestamp;
   const days = Math.floor(diffMs / 86400000);
@@ -71,6 +71,7 @@ function formatMembership(joinedTimestamp) {
   return `${years} Years ${months}m`;
 }
 
+// Check by Display Name if already logged
 async function hasAlreadySubmitted(name) {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
@@ -81,44 +82,35 @@ async function hasAlreadySubmitted(name) {
   return rows.some(row => row[0] === name);
 }
 
-
 // ---------------------------------------------------------------------
-// SUMMARY
+// SUMMARY (kept compatible with your existing E:M legacy block if needed)
 // ---------------------------------------------------------------------
 
 async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
+  // If you change how summary works later, adjust this range/logic.
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: "Sheet1!E:M"
   });
 
   const rows = res.data.values || [];
-  let start = rows[0]?.[0] === "Driver Type" ? 1 : 0;
-
   const summary = {
     total: 0,
-    ft: { stay: 0, reserve: 0, leave: 0 },
-    res: { wantsFt: 0, stay: 0, leave: 0 },
+    fullTimeSeat: 0,
+    reserveSeat: 0,
+    leaving: 0,
   };
 
-  for (let i = start; i < rows.length; i++) {
-    const [driverType, , , , , , , , choice] = rows[i];
-    if (!driverType || !choice) continue;
-
+  // E is Choice in the new layout
+  for (let i = 1; i < rows.length; i++) {
+    const [choice] = rows[i];
+    if (!choice) continue;
     summary.total++;
 
-    if (driverType === "FT") {
-      if (choice === "Stay FT") summary.ft.stay++;
-      if (choice === "Move to Reserve") summary.ft.reserve++;
-      if (choice === "Leaving TTRL") summary.ft.leave++;
-    }
-
-    if (driverType === "Reserve") {
-      if (choice === "Wants FT seat") summary.res.wantsFt++;
-      if (choice === "Stay Reserve") summary.res.stay++;
-      if (choice === "Leaving TTRL") summary.res.leave++;
-    }
+    if (choice === "Full Time Seat") summary.fullTimeSeat++;
+    else if (choice === "Reserve Seat") summary.reserveSeat++;
+    else if (choice === "Leaving TTRL") summary.leaving++;
   }
 
   return summary;
@@ -130,15 +122,9 @@ function formatSignupSummaryText(summary) {
     "",
     `Total responses: ${summary.total}`,
     "",
-    "**Full Time Drivers:**",
-    `  Stay FT: ${summary.ft.stay}`,
-    `  Move to Reserve: ${summary.ft.reserve}`,
-    `  Leaving TTRL: ${summary.ft.leave}`,
-    "",
-    "**Reserve Drivers:**",
-    `  Wants FT seat: ${summary.res.wantsFt}`,
-    `  Stay Reserve: ${summary.res.stay}`,
-    `  Leaving TTRL: ${summary.res.leave}`,
+    `Full Time Seat: ${summary.fullTimeSeat}`,
+    `Reserve Seat: ${summary.reserveSeat}`,
+    `Leaving TTRL: ${summary.leaving}`,
   ].join("\n");
 }
 
@@ -181,9 +167,8 @@ async function updateSignupSummaryMessage(client, guildId) {
   else channel.send(text);
 }
 
-
 // ---------------------------------------------------------------------
-// LOG TO SHEET
+// LOG TO SHEET – new layout A:L
 // ---------------------------------------------------------------------
 
 async function logToSheet(entry) {
@@ -210,8 +195,6 @@ async function logToSheet(entry) {
     requestBody: { values }
   });
 }
-
-
 
 // =====================================================================
 // DISCORD CLIENT
@@ -240,19 +223,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
       // ===============================================================
       if (interaction.commandName === "ttrl-signup") {
 
-        // Permissions
         if (!interaction.inGuild()) {
-          return interaction.reply({ content: "Use this in a server.", ephemeral: true });
+          return interaction.reply({ content: "Use this in a server.", flags: 64 });
         }
         const perms = interaction.memberPermissions;
         const admin =
           perms?.has(PermissionsBitField.Flags.Administrator) ||
           perms?.has(PermissionsBitField.Flags.ManageGuild);
         if (!admin) {
-          return interaction.reply({ content: "Admins only.", ephemeral: true });
+          return interaction.reply({ content: "Admins only.", flags: 64 });
         }
 
-        // Channel option for stats
         let statsChannel = interaction.options.getChannel("statschannel");
 
         const hoisted = interaction.options._hoistedOptions ?? [];
@@ -262,7 +243,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!statsChannel) {
           return interaction.reply({
             content: "This command must include a **channel option** (stats).",
-            ephemeral: true
+            flags: 64
           });
         }
 
@@ -272,7 +253,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!channel?.isTextBased()) {
           return interaction.reply({
             content: "I cannot post here.",
-            ephemeral: true
+            flags: 64
           });
         }
 
@@ -309,15 +290,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         );
 
         await channel.send({ embeds: [embed], components: [row], files: [file] });
-        await interaction.reply({ content: "Signup panel posted.", ephemeral: true });
+        await interaction.reply({ content: "Signup panel posted.", flags: 64 });
         await updateSignupSummaryMessage(client, interaction.guildId);
 
         return;
       }
 
       // ===============================================================
-      // /ttrl-set-autorole (unchanged)
-//      ===============================================================
+      // /ttrl-set-autorole
+      // ===============================================================
       if (interaction.commandName === "ttrl-set-autorole") {
         if (!interaction.inGuild()) return;
 
@@ -326,7 +307,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           perms?.has(PermissionsBitField.Flags.Administrator) ||
           perms?.has(PermissionsBitField.Flags.ManageGuild);
         if (!admin) {
-          return interaction.reply({ content: "Admins only.", ephemeral: true });
+          return interaction.reply({ content: "Admins only.", flags: 64 });
         }
 
         let choice = interaction.options.getString("choice");
@@ -345,7 +326,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!choice) {
           return interaction.reply({
             content: "Missing choice string.",
-            ephemeral: true
+            flags: 64
           });
         }
 
@@ -353,29 +334,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
           autoRoleByChoice.delete(choice);
           return interaction.reply({
             content: `Auto-role disabled for **${choice}**.`,
-            ephemeral: true
+            flags: 64
           });
         }
 
         autoRoleByChoice.set(choice, role.id);
         return interaction.reply({
           content: `Users selecting **${choice}** will now receive **${role.name}** automatically.`,
-          ephemeral: true
+          flags: 64
         });
       }
 
       return;
     }
-
-
-
-    // =================================================================
+// =================================================================
     // BUTTON HANDLING
     // =================================================================
     if (!interaction.isButton()) return;
 
     const [base, choiceLabel] = interaction.customId.split("|");
     if (base !== "ttrlchoice") return;
+
+    // Defer immediately to avoid Unknown interaction (10062) and use flags for ephemeral. [web:18][web:15][web:23]
+    await interaction.deferReply({ flags: 64 });
 
     const user = interaction.user;
 
@@ -385,17 +366,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
       member = await interaction.guild.members.fetch(user.id).catch(() => null);
     }
     if (!member) {
-      return interaction.reply({ content: "Could not load your member data.", ephemeral: true });
+      return interaction.editReply({ content: "Could not load your member data." });
     }
 
     const displayName = member.displayName || member.user.username;
     const membershipText = formatMembership(member.joinedTimestamp || Date.now());
 
-    // Prevent duplicate submissions
+    // Prevent duplicate submissions (by display name)
     if (await hasAlreadySubmitted(displayName)) {
-      return interaction.reply({
-        content: "You have already submitted your signup.",
-        ephemeral: true
+      return interaction.editReply({
+        content: "You have already submitted your signup."
       });
     }
 
@@ -456,23 +436,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
       catch (err) { console.error("Auto-role failed:", err.message); }
     }
 
-    await interaction.reply({
-      content: `Your signup choice **${choice}** has been recorded. A DM has been sent.`,
-      ephemeral: true
+    await interaction.editReply({
+      content: `Your signup choice **${choice}** has been recorded. A DM has been sent.`
     });
 
     member.send(`Your TTRL signup choice has been recorded as: ${choice}.`).catch(() => {});
 
   } catch (err) {
     console.error("Interaction error:", err);
-    if (interaction.replied || interaction.deferred) {
-      interaction.followUp({ content: "Something went wrong.", ephemeral: true }).catch(() => {});
-    } else {
-      interaction.reply({ content: "Something went wrong.", ephemeral: true }).catch(() => {});
-    }
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: "Something went wrong." });
+      } else if (interaction.isRepliable()) {
+        await interaction.reply({ content: "Something went wrong.", flags: 64 });
+      }
+    } catch (_) {}
   }
 });
-
 
 // =====================================================================
 // LOGIN
