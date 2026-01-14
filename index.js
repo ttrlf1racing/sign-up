@@ -81,14 +81,14 @@ async function hasAlreadySubmitted(name) {
 }
 
 // ---------------------------------------------------------------------
-// SUMMARY (Choice column is now F after shifting; we read that)
+// SUMMARY – Choice is column F
 // ---------------------------------------------------------------------
 
 async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!F:F" // F = Choice in new layout
+    range: "Sheet1!F:F" // F = Choice
   });
 
   const rows = res.data.values || [];
@@ -164,7 +164,7 @@ async function updateSignupSummaryMessage(client, guildId) {
 }
 
 // ---------------------------------------------------------------------
-// LOG TO SHEET – new layout A:M
+// LOG TO SHEET – layout A:M
 // A Timestamp
 // B Display Name
 // C Username
@@ -425,7 +425,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Split into Tier role(s) and Realistic role(s)
     const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
 
     const tierRolesArr = rolesExcludingEveryone
@@ -438,7 +437,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
     const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
 
-    // Choice: either Full Time Seat / Reserve Seat / Leaving TTRL
     const choice = choiceLabel;
 
     await logToSheet({
@@ -460,7 +458,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await updateSignupSummaryMessage(client, interaction.guildId);
 
     // -----------------------------------------------------------------
-    // 4) Apply Leaving roles (confirmed only) – safe add/remove
+    // 4) Apply Leaving roles (confirmed only) – per-role remove/add
     // -----------------------------------------------------------------
     if (choice === "Leaving TTRL" && state === "confirm") {
       const leavingRoleId = "1460986192966455449";
@@ -473,20 +471,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const botMember = await interaction.guild.members.fetchMe();
           const botPosition = botMember.roles.highest.position;
 
-          // Remove all roles the bot can manage (not @everyone, below bot)
+          // Remove each manageable role individually
           const rolesToRemove = member.roles.cache.filter(r =>
-            r.id !== interaction.guild.id &&
-            r.position < botPosition
+            r.id !== interaction.guild.id &&          // not @everyone
+            r.id !== leavingRoleId &&                 // not Leaving
+            r.position < botPosition                  // below bot
           );
 
-          if (rolesToRemove.size > 0) {
-            await member.roles.remove(rolesToRemove);
+          for (const [, role] of rolesToRemove) {
+            try {
+              await member.roles.remove(role);
+            } catch (err) {
+              console.error(`Failed to remove role ${role.name}:`, err);
+            }
           }
 
-          // Add Leaving role if bot can manage it
-          if (leavingRole.position < botPosition) {
-            await member.roles.add(leavingRole);
-          } else {
+          // Add Leaving role if manageable and not already present
+          if (leavingRole.position < botPosition && !member.roles.cache.has(leavingRoleId)) {
+            try {
+              await member.roles.add(leavingRole);
+            } catch (err) {
+              console.error("Failed to add Leaving role:", err);
+            }
+          } else if (leavingRole.position >= botPosition) {
             console.error("Bot cannot manage Leaving role (position too high).");
           }
         } catch (err) {
