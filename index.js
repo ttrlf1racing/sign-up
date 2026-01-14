@@ -405,18 +405,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await updateSignupSummaryMessage(client, interaction.guildId);
 
     // Handle Leaving TTRL role changes
-    if (choice === "Leaving TTRL") {
-      const leavingRoleId = "1460986192966455449";
+if (choice === "Leaving TTRL") {
+  const leavingRoleId = "1460986192966455449";
 
-      // Remove all roles except @everyone (guild id)
-      const rolesToRemove = member.roles.cache.filter(r => r.id !== interaction.guild.id);
-      if (rolesToRemove.size > 0) {
-        try {
-          await member.roles.remove(rolesToRemove);
-        } catch (err) {
-          console.error("Failed to remove roles for Leaving TTRL:", err);
-        }
-      }
+  // Make sure we know the leaving role
+  const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
+  if (leavingRole) {
+    try {
+      // Keep only @everyone and the Leaving role
+      await member.roles.set([interaction.guild.id, leavingRoleId]);
+    } catch (err) {
+      console.error("Failed to set roles for Leaving TTRL:", err);
+    }
+  } else {
+    console.error("Leaving role not found in guild:", leavingRoleId);
+  }
+}
+
 
       // Add Leaving role
       const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
