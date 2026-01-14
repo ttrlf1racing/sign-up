@@ -268,19 +268,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const embed = new EmbedBuilder()
-          .setTitle("TTRL Sign-Up Process")
-          .setDescription([
-            "Welcome to the TTRL sign-up process!",
-            "",
-            "Please choose your intention for the upcoming season:",
-            "- Full Time Seat",
-            "- Reserve Seat",
-            "- Leaving TTRL",
-            "",
-            "Click one of the buttons below to record your choice."
-          ].join("\n"))
-          .setThumbnail("attachment://ttrl-logo.png")
-          .setColor(0xffcc00);
+  .setTitle("F125 Season 4  Sign-Up")
+  .setDescription([
+    "Welcome to the TTRL F125 Season 4 sign-up!",
+    "",
+    "Please select one option below:",
+    "🏎️ **Full Time Seat** – Race every round",
+    "🔄 **Reserve Seat** – Stand-in driver",
+    "👋 **Leaving TTRL** – Exit the league",
+    "",
+    "Your choice will be recorded in the signup sheet."
+  ].join("\n"))
+  .setThumbnail("attachment://ttrl-logo.png")
+  .setColor(0xA020F0); // purple
+
 
         const file = new AttachmentBuilder("ttrl-logo.png");
 
