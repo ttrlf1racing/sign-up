@@ -436,16 +436,16 @@ console.log(`Member ${displayName} roles:`, rolesExcludingEveryone.map(r => r.na
 const tierRolesArr = rolesExcludingEveryone
   .filter(r => {
     const name = r.name;
-    // Match "Tier 1 - FT", "Tier 2 - Res", etc.
-    return name.startsWith("Tier") && (name.includes("- FT") || name.includes("- Res"));
+    // Match roles containing "Tier" with "- FT" or "- Res" (handles emoji prefixes)
+    return name.includes("Tier") && (name.includes("- FT") || name.includes("- Res"));
   })
   .map(r => r.name);
 
 const realisticRolesArr = rolesExcludingEveryone
   .filter(r => {
     const name = r.name;
-    // Match "Realistic - FT" or "Realistic - Res"
-    return name.startsWith("Realistic") && (name.includes("- FT") || name.includes("- Res"));
+    // Match roles containing "Realistic" with "- FT" or "- Res"
+    return name.includes("Realistic") && (name.includes("- FT") || name.includes("- Res"));
   })
   .map(r => r.name);
 
