@@ -426,22 +426,36 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     // -----------------------------------------------------------------
-    // CAPTURE ROLES *BEFORE* ANY CHANGES
-    // -----------------------------------------------------------------
-    const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
+// CAPTURE ROLES *BEFORE* ANY CHANGES
+// -----------------------------------------------------------------
+const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
 
-    const tierRolesArr = rolesExcludingEveryone
-      .filter(r => r.name.startsWith("Tier"))
-      .map(r => r.name);
+// Debug: log all roles
+console.log(`Member ${displayName} roles:`, rolesExcludingEveryone.map(r => r.name).join(", "));
 
-    const realisticRolesArr = rolesExcludingEveryone
-      .filter(r => r.name.startsWith("Realistic"))
-      .map(r => r.name);
+const tierRolesArr = rolesExcludingEveryone
+  .filter(r => {
+    const name = r.name;
+    // Match "Tier 1 - FT", "Tier 2 - Res", etc.
+    return name.startsWith("Tier") && (name.includes("- FT") || name.includes("- Res"));
+  })
+  .map(r => r.name);
 
-    const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
-    const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
+const realisticRolesArr = rolesExcludingEveryone
+  .filter(r => {
+    const name = r.name;
+    // Match "Realistic - FT" or "Realistic - Res"
+    return name.startsWith("Realistic") && (name.includes("- FT") || name.includes("- Res"));
+  })
+  .map(r => r.name);
 
-    const choice = choiceLabel;
+const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
+const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
+
+console.log(`Tier roles found: ${tierRoles}`);
+console.log(`Realistic roles found: ${realisticRoles}`);
+
+const choice = choiceLabel;
 
     // -----------------------------------------------------------------
     // LOG TO SHEET *BEFORE* ROLE CHANGES
