@@ -429,9 +429,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
 
+// Choice: either Full Time Seat / Reserve Seat / Leaving TTRL
+const choice = choiceLabel;
+
+// Always capture Tier / Realistic from current roles (before any removals)
 const tierRolesArr = rolesExcludingEveryone
   .filter(r => r.name.startsWith("Tier"))
   .map(r => r.name);
+
 const realisticRolesArr = rolesExcludingEveryone
   .filter(r => r.name.startsWith("Realistic"))
   .map(r => r.name);
@@ -439,14 +444,12 @@ const realisticRolesArr = rolesExcludingEveryone
 const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
 const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
 
-const choice = choiceLabel;
-
 await logToSheet({
   displayName,
   username: user.username,
-  tierRoles,
-  realisticRoles,
-  choice,
+  tierRoles,          // D
+  realisticRoles,     // E
+  choice,             // F
   timestamp: formatTimestamp(),
   membershipText,
   joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
@@ -456,6 +459,7 @@ await logToSheet({
   allRoles: rolesExcludingEveryone.map(r => r.name).join(", ") || "None",
   boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting"
 });
+
 
 // NOW do the Leaving role cleanup
 if (choice === "Leaving TTRL" && state === "confirm") {
