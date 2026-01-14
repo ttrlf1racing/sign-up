@@ -58,7 +58,6 @@ function formatTimestamp(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-// Membership text, using “Years”.
 function formatMembership(joinedTimestamp) {
   const diffMs = Date.now() - joinedTimestamp;
   const days = Math.floor(diffMs / 86400000);
@@ -71,7 +70,6 @@ function formatMembership(joinedTimestamp) {
   return `${years} Years ${months}m`;
 }
 
-// Check by Display Name if already logged
 async function hasAlreadySubmitted(name) {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
@@ -83,14 +81,14 @@ async function hasAlreadySubmitted(name) {
 }
 
 // ---------------------------------------------------------------------
-// SUMMARY
+// SUMMARY (Choice column is now F after shifting; we read that)
 // ---------------------------------------------------------------------
 
 async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!E:E" // E is Choice
+    range: "Sheet1!F:F" // F = Choice in new layout
   });
 
   const rows = res.data.values || [];
@@ -166,7 +164,20 @@ async function updateSignupSummaryMessage(client, guildId) {
 }
 
 // ---------------------------------------------------------------------
-// LOG TO SHEET – layout A:L
+// LOG TO SHEET – new layout A:M
+// A Timestamp
+// B Display Name
+// C Username
+// D Tier Role(s)
+// E Realistic Role(s)
+// F Choice
+// G Membership
+// H Join Date
+// I User ID
+// J Account Created
+// K Avatar URL
+// L All Roles
+// M Boost Status
 // ---------------------------------------------------------------------
 
 async function logToSheet(entry) {
@@ -175,20 +186,21 @@ async function logToSheet(entry) {
     entry.timestamp,        // A
     entry.displayName,      // B
     entry.username,         // C
-    entry.currentRole,      // D (Tier/Realistic roles)
-    entry.choice,           // E
-    entry.membershipText,   // F
-    entry.joinDate,         // G
-    entry.userId,           // H
-    entry.accountCreated,   // I
-    entry.avatarUrl,        // J
-    entry.allRoles,         // K
-    entry.boostStatus       // L
+    entry.tierRoles,        // D
+    entry.realisticRoles,   // E
+    entry.choice,           // F
+    entry.membershipText,   // G
+    entry.joinDate,         // H
+    entry.userId,           // I
+    entry.accountCreated,   // J
+    entry.avatarUrl,        // K
+    entry.allRoles,         // L
+    entry.boostStatus       // M
   ]];
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!A:L",
+    range: "Sheet1!A:M",
     valueInputOption: "USER_ENTERED",
     requestBody: { values }
   });
@@ -371,7 +383,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
               .setStyle(ButtonStyle.Secondary),
           )
         ],
-        flags: 64 // ephemeral confirm
+        flags: 64
       });
       return;
     }
@@ -413,18 +425,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Current Role = roles starting with Tier or Realistic (can be multiple)
-    const tierRealisticRoles = member.roles.cache
-      .filter(r => r.id !== interaction.guild.id) // exclude @everyone
-      .filter(r =>
-        r.name.startsWith("Tier") ||
-        r.name.startsWith("Realistic")
-      )
+    // Split into Tier role(s) and Realistic role(s)
+    const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
+
+    const tierRolesArr = rolesExcludingEveryone
+      .filter(r => r.name.startsWith("Tier"))
+      .map(r => r.name);
+    const realisticRolesArr = rolesExcludingEveryone
+      .filter(r => r.name.startsWith("Realistic"))
       .map(r => r.name);
 
-    const currentRole = tierRealisticRoles.length > 0
-      ? tierRealisticRoles.join(", ")
-      : "None";
+    const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
+    const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
 
     // Choice: either Full Time Seat / Reserve Seat / Leaving TTRL
     const choice = choiceLabel;
@@ -432,7 +444,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await logToSheet({
       displayName,
       username: user.username,
-      currentRole,
+      tierRoles,
+      realisticRoles,
       choice,
       timestamp: formatTimestamp(),
       membershipText,
@@ -440,14 +453,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       userId: member.id,
       accountCreated: member.user.createdAt.toISOString().split("T")[0],
       avatarUrl: member.user.displayAvatarURL({ size: 256 }),
-      allRoles: member.roles.cache.map(r => r.name).filter(n => n !== "@everyone").join(", ") || "None",
+      allRoles: rolesExcludingEveryone.map(r => r.name).join(", ") || "None",
       boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting"
     });
 
     await updateSignupSummaryMessage(client, interaction.guildId);
 
     // -----------------------------------------------------------------
-    // 4) Apply Leaving roles (confirmed only) - safe version
+    // 4) Apply Leaving roles (confirmed only) – safe add/remove
     // -----------------------------------------------------------------
     if (choice === "Leaving TTRL" && state === "confirm") {
       const leavingRoleId = "1460986192966455449";
@@ -457,7 +470,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.error("Leaving role not found in guild:", leavingRoleId);
       } else {
         try {
-          // Bot's own role position
           const botMember = await interaction.guild.members.fetchMe();
           const botPosition = botMember.roles.highest.position;
 
