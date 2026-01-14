@@ -1,5 +1,5 @@
 // ====================================================================
-//  TTRL SIGNUP BOT - UPDATED FOR NEW SHEET LAYOUT
+//  TTRL SIGNUP BOT - UPDATED SHEET + LEAVING CONFIRM
 // ====================================================================
 
 require('dotenv').config();
@@ -83,15 +83,14 @@ async function hasAlreadySubmitted(name) {
 }
 
 // ---------------------------------------------------------------------
-// SUMMARY (kept compatible with your existing E:M legacy block if needed)
+// SUMMARY
 // ---------------------------------------------------------------------
 
 async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
-  // If you change how summary works later, adjust this range/logic.
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!E:M"
+    range: "Sheet1!E:E" // E is Choice
   });
 
   const rows = res.data.values || [];
@@ -102,7 +101,6 @@ async function getSignupSummaryFromSheets() {
     leaving: 0,
   };
 
-  // E is Choice in the new layout
   for (let i = 1; i < rows.length; i++) {
     const [choice] = rows[i];
     if (!choice) continue;
@@ -177,7 +175,7 @@ async function logToSheet(entry) {
     entry.timestamp,        // A
     entry.displayName,      // B
     entry.username,         // C
-    entry.currentRole,      // D (top role)
+    entry.currentRole,      // D (Tier/Realistic roles)
     entry.choice,           // E
     entry.membershipText,   // F
     entry.joinDate,         // G
@@ -358,7 +356,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // -----------------------------------------------------------------
     // 1) First click – Leaving TTRL: show confirmation
     // -----------------------------------------------------------------
-    if (choiceLabel === "Leaving TTRL" && state !== "confirm") {
+    if (choiceLabel === "Leaving TTRL" && state !== "confirm" && state !== "cancel") {
       await interaction.reply({
         content: "Are you sure you want to leave our great league?\n\nPlease note after clicking this button you will lose your current roles and be moved to the leaving channel.",
         components: [
@@ -415,12 +413,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Highest role (excluding @everyone)
-    const topRole = member.roles.highest && member.roles.highest.id !== interaction.guild.id
-      ? member.roles.highest.name
-      : "None";
+    // Current Role = roles starting with Tier or Realistic (can be multiple)
+    const tierRealisticRoles = member.roles.cache
+      .filter(r => r.id !== interaction.guild.id) // exclude @everyone
+      .filter(r =>
+        r.name.startsWith("Tier") ||
+        r.name.startsWith("Realistic")
+      )
+      .map(r => r.name);
 
-    const currentRole = topRole;
+    const currentRole = tierRealisticRoles.length > 0
+      ? tierRealisticRoles.join(", ")
+      : "None";
 
     // Choice: either Full Time Seat / Reserve Seat / Leaving TTRL
     const choice = choiceLabel;
@@ -445,7 +449,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // -----------------------------------------------------------------
     // 4) Apply Leaving roles (confirmed only)
     // -----------------------------------------------------------------
-    if (choice === "Leaving TTRL") {
+    if (choice === "Leaving TTRL" && state === "confirm") {
       const leavingRoleId = "1460986192966455449";
       const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
 
@@ -463,7 +467,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // -----------------------------------------------------------------
     // 5) Optional auto-role based on choice (for non-leaving choices)
-    // -----------------------------------------------------------------
+// -----------------------------------------------------------------
     if (choice !== "Leaving TTRL" && autoRoleByChoice.has(choice)) {
       const roleId = autoRoleByChoice.get(choice);
       try { await member.roles.add(roleId); }
@@ -476,6 +480,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     member.send(`Your TTRL signup choice has been recorded as: ${choice}.`).catch(() => {});
 
+  } catch (err) {
+    console.error("Interaction error:", err);
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: "Something went wrong." });
+      } else if (interaction.isRepliable()) {
+        await interaction.reply({ content: "Something went wrong.", flags: 64 });
+      }
+    } catch (_) {}
+  }
+});
 
 // =====================================================================
 // LOGIN
