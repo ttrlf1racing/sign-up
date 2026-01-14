@@ -347,15 +347,51 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       return;
     }
-// =================================================================
+    // =================================================================
     // BUTTON HANDLING
     // =================================================================
     if (!interaction.isButton()) return;
 
-    const [base, choiceLabel] = interaction.customId.split("|");
+    const [base, choiceLabel, state] = interaction.customId.split("|");
     if (base !== "ttrlchoice") return;
 
-    // Defer immediately to avoid Unknown interaction (10062) and use flags for ephemeral. [web:18][web:15][web:23]
+    // -----------------------------------------------------------------
+    // 1) First click – Leaving TTRL: show confirmation
+    // -----------------------------------------------------------------
+    if (choiceLabel === "Leaving TTRL" && state !== "confirm") {
+      await interaction.reply({
+        content: "Are you sure you want to leave our great league?\n\nPlease note after clicking this button you will lose your current roles and be moved to the leaving channel.",
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId("ttrlchoice|Leaving TTRL|confirm")
+              .setLabel("Yes, I want to leave")
+              .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+              .setCustomId("ttrlchoice|Leaving TTRL|cancel")
+              .setLabel("Cancel")
+              .setStyle(ButtonStyle.Secondary),
+          )
+        ],
+        flags: 64 // ephemeral confirm
+      });
+      return;
+    }
+
+    // -----------------------------------------------------------------
+    // 2) Handle Leaving TTRL cancel
+    // -----------------------------------------------------------------
+    if (choiceLabel === "Leaving TTRL" && state === "cancel") {
+      await interaction.reply({
+        content: "Leaving cancelled. Your roles will not be changed.",
+        flags: 64
+      });
+      return;
+    }
+
+    // -----------------------------------------------------------------
+    // 3) All confirmed choices (including confirmed Leaving)
+    // -----------------------------------------------------------------
     await interaction.deferReply({ flags: 64 });
 
     const user = interaction.user;
@@ -385,7 +421,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       : "None";
 
     const currentRole = topRole;
-    const choice = choiceLabel; // "Full Time Seat" | "Reserve Seat" | "Leaving TTRL"
+
+    // Choice: either Full Time Seat / Reserve Seat / Leaving TTRL
+    const choice = choiceLabel;
 
     await logToSheet({
       displayName,
@@ -404,38 +442,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     await updateSignupSummaryMessage(client, interaction.guildId);
 
-    // Handle Leaving TTRL role changes
-if (choice === "Leaving TTRL") {
-  const leavingRoleId = "1460986192966455449";
-
-  // Make sure we know the leaving role
-  const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
-  if (leavingRole) {
-    try {
-      // Keep only @everyone and the Leaving role
-      await member.roles.set([interaction.guild.id, leavingRoleId]);
-    } catch (err) {
-      console.error("Failed to set roles for Leaving TTRL:", err);
-    }
-  } else {
-    console.error("Leaving role not found in guild:", leavingRoleId);
-  }
-}
-
-
-      // Add Leaving role
+    // -----------------------------------------------------------------
+    // 4) Apply Leaving roles (confirmed only)
+    // -----------------------------------------------------------------
+    if (choice === "Leaving TTRL") {
+      const leavingRoleId = "1460986192966455449";
       const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
+
       if (leavingRole) {
         try {
-          await member.roles.add(leavingRole);
+          // Keep only @everyone and the Leaving role
+          await member.roles.set([interaction.guild.id, leavingRoleId]);
         } catch (err) {
-          console.error("Failed to add Leaving role:", err);
+          console.error("Failed to set roles for Leaving TTRL:", err);
         }
+      } else {
+        console.error("Leaving role not found in guild:", leavingRoleId);
       }
     }
 
-    // Optional auto-role based on choice (if configured)
-    if (autoRoleByChoice.has(choice)) {
+    // -----------------------------------------------------------------
+    // 5) Optional auto-role based on choice (for non-leaving choices)
+    // -----------------------------------------------------------------
+    if (choice !== "Leaving TTRL" && autoRoleByChoice.has(choice)) {
       const roleId = autoRoleByChoice.get(choice);
       try { await member.roles.add(roleId); }
       catch (err) { console.error("Auto-role failed:", err.message); }
@@ -447,17 +476,6 @@ if (choice === "Leaving TTRL") {
 
     member.send(`Your TTRL signup choice has been recorded as: ${choice}.`).catch(() => {});
 
-  } catch (err) {
-    console.error("Interaction error:", err);
-    try {
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: "Something went wrong." });
-      } else if (interaction.isRepliable()) {
-        await interaction.reply({ content: "Something went wrong.", flags: 64 });
-      }
-    } catch (_) {}
-  }
-});
 
 // =====================================================================
 // LOGIN
