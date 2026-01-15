@@ -668,7 +668,6 @@ await interaction.editReply({
     `• Sunday: **${sundayChoice}**`,
     `• Wednesday: **${wednesdayChoice}**`,
     "",
-    `Summary choice for roles/stats: **${mainChoice}**. A DM has been sent.`
   ].join("\n")
 });
 
@@ -676,7 +675,6 @@ member.send([
   "Your TTRL signup has been recorded:",
   `Sunday: ${sundayChoice}`,
   `Wednesday: ${wednesdayChoice}`,
-  `Summary choice: ${mainChoice}`
 ].join("\n")).catch(() => {});
 
       return;
