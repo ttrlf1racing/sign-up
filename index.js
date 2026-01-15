@@ -82,7 +82,7 @@ async function hasAlreadySubmitted(name) {
 }
 
 // ---------------------------------------------------------------------
-// SUMMARY – Choice is column F (for now we still summarise by main choice)
+// SUMMARY – Choice is column F (main choice)
 // ---------------------------------------------------------------------
 
 async function getSignupSummaryFromSheets() {
@@ -165,7 +165,7 @@ async function updateSignupSummaryMessage(client, guildId) {
 }
 
 // ---------------------------------------------------------------------
-// LOG TO SHEET – layout A:M (same as before)
+// LOG TO SHEET – layout A:M
 // A Timestamp
 // B Display Name
 // C Username
@@ -323,8 +323,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       // ===============================================================
-      // /ttrl-set-autorole (unchanged)
-// ===============================================================
+      // /ttrl-set-autorole
+      // ===============================================================
       if (interaction.commandName === "ttrl-set-autorole") {
         if (!interaction.inGuild()) return;
 
@@ -373,6 +373,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       return;
     }
+
     // =================================================================
     // BUTTON HANDLING
     // =================================================================
@@ -381,9 +382,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const [base, section, action] = interaction.customId.split("|");
     if (base !== "ttrlchoice") return;
 
-    // --------------------------------------------------------------
-    // Helper: map internal codes → friendly labels
-    // --------------------------------------------------------------
+    // Helper maps for labels
     const sundayLabelMap = {
       fulltime: "Full Time Seat (Sunday)",
       reserve: "Reserve Seat (Sunday)",
@@ -466,7 +465,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .map(r => r.name);
 
         const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
-        const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ");
+        const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
 
         console.log(`Tier roles found: ${tierRoles}`);
         console.log(`Realistic roles found: ${realisticRoles}`);
@@ -546,18 +545,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // SUNDAY / WEDNESDAY FLOW
     // --------------------------------------------------------------
 
-    // SUNDAY STEP (Option A – first step)
+    // SUNDAY STEP
     if (section === "sunday") {
-      // Sunday choice string for sheet/summary context
       const sundayChoice = sundayLabelMap[action] || "Unknown (Sunday)";
 
-      // Store in memory (per user) to use when Wednesday is chosen
       pendingSignup.set(interaction.user.id, {
         sundayChoice,
         guildId: interaction.guildId,
       });
 
-      // Ask for Wednesday choice (ephemeral)
       const wedRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("ttrlchoice|wednesday|fulltime")
@@ -582,7 +578,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    // WEDNESDAY STEP (Option A – second step, final logging)
+    // WEDNESDAY STEP (finalise signup)
     if (section === "wednesday") {
       const pending = pendingSignup.get(interaction.user.id);
       if (!pending || pending.guildId !== interaction.guildId) {
@@ -596,7 +592,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const wednesdayChoice = wedLabelMap[action] || "Unknown (Wednesday)";
       const { sundayChoice } = pending;
 
-      // Clear pending as we are about to complete signup
       pendingSignup.delete(interaction.user.id);
 
       await interaction.deferReply({ flags: 64 });
@@ -613,14 +608,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const displayName = member.displayName || member.user.username;
       const membershipText = formatMembership(member.joinedTimestamp || Date.now());
 
-      // Prevent duplicate submissions (by display name)
       if (await hasAlreadySubmitted(displayName)) {
         return interaction.editReply({
           content: "You have already submitted your signup."
         });
       }
 
-      // CAPTURE ROLES *BEFORE* ANY CHANGES
       const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
 
       console.log(`Member ${displayName} roles:`, rolesExcludingEveryone.map(r => r.name).join(", "));
@@ -645,13 +638,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       console.log(`Tier roles found: ${tierRoles}`);
       console.log(`Realistic roles found: ${realisticRoles}`);
 
-      // MAIN CHOICE for summary column F:
-      // you can decide how to summarise; here we use Sunday choice headline.
+      // Main summary choice in F (based on Sunday)
       let mainChoice = "Reserve Seat";
       if (sundayChoice.includes("Full Time")) mainChoice = "Full Time Seat";
       if (sundayChoice.includes("Not Participating")) mainChoice = "Reserve Seat";
 
-      // LOG TO SHEET
       await logToSheet({
         displayName,
         username: user.username,
@@ -670,7 +661,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await updateSignupSummaryMessage(client, interaction.guildId);
 
-      // Optional auto-role (based on mainChoice – same mapping as before)
       if (mainChoice !== "Leaving TTRL" && autoRoleByChoice.has(mainChoice)) {
         const roleId = autoRoleByChoice.get(mainChoice);
         try { await member.roles.add(roleId); }
@@ -697,7 +687,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    // If some other button with ttrlchoice base appears, ignore
     return;
 
   } catch (err) {
@@ -711,6 +700,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     } catch (_) {}
   }
 });
+
 // =====================================================================
 // LOGIN
 // =====================================================================
