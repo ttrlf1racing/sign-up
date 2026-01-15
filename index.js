@@ -651,33 +651,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await updateSignupSummaryMessage(client, interaction.guildId);
 
-      // Optional auto-role keyed off Sunday summary (Full Time / Reserve)
-      let mainChoice = "Reserve Seat";
-      if (sundayChoice.includes("Full Time")) mainChoice = "Full Time Seat";
-      if (sundayChoice === "Leaving TTRL") mainChoice = "Leaving TTRL";
+     // Optional auto-role keyed off Sunday summary (Full Time / Reserve)
+let mainChoice = "Reserve Seat";
+if (sundayChoice.includes("Full Time")) mainChoice = "Full Time Seat";
+if (sundayChoice === "Leaving TTRL") mainChoice = "Leaving TTRL";
 
-      if (autoRoleByChoice.has(mainChoice)) {
-        const roleId = autoRoleByChoice.get(mainChoice);
-        try { await member.roles.add(roleId); }
-        catch (err) { console.error("Auto-role failed:", err.message); }
-      }
+if (autoRoleByChoice.has(mainChoice)) {
+  const roleId = autoRoleByChoice.get(mainChoice);
+  try { await member.roles.add(roleId); }
+  catch (err) { console.error("Auto-role failed:", err.message); }
+}
 
-      await interaction.editReply({
-        content: [
-          "Your signup has been recorded:",
-          `• Sunday: **${sundayChoice}**`,
-          `• Wednesday: **${wednesdayChoice}**`,
-          "",
-          `Summary choice for roles/stats: **${mainChoice}**. A DM has been sent.`
-        ].join("\n")
-      });
+await interaction.editReply({
+  content: [
+    "Your signup has been recorded:",
+    `• Sunday: **${sundayChoice}**`,
+    `• Wednesday: **${wednesdayChoice}**`,
+    "",
+    `Summary choice for roles/stats: **${mainChoice}**. A DM has been sent.`
+  ].join("\n")
+});
 
-      member.send([
-        "Your TTRL signup has been recorded:",
-        `Sunday: ${sundayChoice}`,
-        `Wednesday: ${wednesdayChoice}`,
-        `Summary choice: ${mainChoice}`
-      ].join("\n")).catch(() => {});
+member.send([
+  "Your TTRL signup has been recorded:",
+  `Sunday: ${sundayChoice}`,
+  `Wednesday: ${wednesdayChoice}`,
+  `Summary choice: ${mainChoice}`
+].join("\n")).catch(() => {});
 
       return;
     }
