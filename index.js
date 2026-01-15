@@ -82,14 +82,14 @@ async function hasAlreadySubmitted(name) {
 }
 
 // ---------------------------------------------------------------------
-// SUMMARY – Choice is column F (main choice)
+// SUMMARY – use Sunday Choice (F) for now
 // ---------------------------------------------------------------------
 
 async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!F:F" // F = Choice
+    range: "Sheet1!F:F" // F = Sunday Choice
   });
 
   const rows = res.data.values || [];
@@ -101,13 +101,13 @@ async function getSignupSummaryFromSheets() {
   };
 
   for (let i = 1; i < rows.length; i++) {
-    const [choice] = rows[i];
-    if (!choice) continue;
+    const [sundayChoice] = rows[i];
+    if (!sundayChoice) continue;
     summary.total++;
 
-    if (choice === "Full Time Seat") summary.fullTimeSeat++;
-    else if (choice === "Reserve Seat") summary.reserveSeat++;
-    else if (choice === "Leaving TTRL") summary.leaving++;
+    if (sundayChoice.includes("Full Time")) summary.fullTimeSeat++;
+    else if (sundayChoice.includes("Reserve")) summary.reserveSeat++;
+    else if (sundayChoice === "Leaving TTRL") summary.leaving++;
   }
 
   return summary;
@@ -119,8 +119,8 @@ function formatSignupSummaryText(summary) {
     "",
     `Total responses: ${summary.total}`,
     "",
-    `Full Time Seat: ${summary.fullTimeSeat}`,
-    `Reserve Seat: ${summary.reserveSeat}`,
+    `Full Time (Sunday): ${summary.fullTimeSeat}`,
+    `Reserve (Sunday): ${summary.reserveSeat}`,
     `Leaving TTRL: ${summary.leaving}`,
   ].join("\n");
 }
@@ -165,20 +165,21 @@ async function updateSignupSummaryMessage(client, guildId) {
 }
 
 // ---------------------------------------------------------------------
-// LOG TO SHEET – layout A:M
+// LOG TO SHEET – layout A:N
 // A Timestamp
 // B Display Name
 // C Username
-// D Tier Role(s)
-// E Realistic Role(s)
-// F Choice (main summary choice)
-// G Membership
-// H Join Date
-// I User ID
-// J Account Created
-// K Avatar URL
-// L All Roles
-// M Boost Status
+// D Current Tier Role
+// E Current Realistic Role
+// F Sunday Choice
+// G Wednesday Choice
+// H How long in Server
+// I Join Date
+// J User ID
+// K Account Created
+// L Avatar URL
+// M All Current Roles
+// N Boost Status
 // ---------------------------------------------------------------------
 
 async function logToSheet(entry) {
@@ -189,19 +190,20 @@ async function logToSheet(entry) {
     entry.username,         // C
     entry.tierRoles,        // D
     entry.realisticRoles,   // E
-    entry.choice,           // F
-    entry.membershipText,   // G
-    entry.joinDate,         // H
-    entry.userId,           // I
-    entry.accountCreated,   // J
-    entry.avatarUrl,        // K
-    entry.allRoles,         // L
-    entry.boostStatus       // M
+    entry.sundayChoice,     // F
+    entry.wednesdayChoice,  // G
+    entry.membershipText,   // H
+    entry.joinDate,         // I
+    entry.userId,           // J
+    entry.accountCreated,   // K
+    entry.avatarUrl,        // L
+    entry.allRoles,         // M
+    entry.boostStatus       // N
   ]];
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!A:M",
+    range: "Sheet1!A:N",
     valueInputOption: "USER_ENTERED",
     requestBody: { values }
   });
@@ -382,7 +384,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const [base, section, action] = interaction.customId.split("|");
     if (base !== "ttrlchoice") return;
 
-    // Helper maps for labels
     const sundayLabelMap = {
       fulltime: "Full Time Seat (Sunday)",
       reserve: "Reserve Seat (Sunday)",
@@ -399,7 +400,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // LEAVING TTRL FLOW
     // --------------------------------------------------------------
     if (section === "leaving") {
-      // First click – show confirm/cancel
       if (action === "start") {
         await interaction.reply({
           content: "Are you sure you want to leave our great league?\n\nPlease note after clicking this button you will lose your current roles and be moved to the leaving channel.",
@@ -420,7 +420,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // Cancel
       if (action === "cancel") {
         await interaction.reply({
           content: "Leaving cancelled. Your roles will not be changed.",
@@ -429,7 +428,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // Confirm
       if (action === "confirm") {
         await interaction.deferReply({ flags: 64 });
 
@@ -445,7 +443,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const displayName = member.displayName || member.user.username;
         const membershipText = formatMembership(member.joinedTimestamp || Date.now());
 
-        // CAPTURE ROLES *BEFORE* ANY CHANGES
         const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
 
         console.log(`Member ${displayName} roles:`, rolesExcludingEveryone.map(r => r.name).join(", "));
@@ -470,15 +467,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.log(`Tier roles found: ${tierRoles}`);
         console.log(`Realistic roles found: ${realisticRoles}`);
 
-        const choice = "Leaving TTRL";
-
-        // LOG TO SHEET BEFORE CHANGES
         await logToSheet({
           displayName,
           username: user.username,
           tierRoles,
           realisticRoles,
-          choice,
+          sundayChoice: "Leaving TTRL",
+          wednesdayChoice: "Leaving TTRL",
           timestamp: formatTimestamp(),
           membershipText,
           joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
@@ -491,8 +486,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await updateSignupSummaryMessage(client, interaction.guildId);
 
-        // NOW MODIFY ROLES
-        const leavingRoleId = "1460986192966455449"; // your Leaving role
+        const leavingRoleId = "1460986192966455449";
         const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
 
         if (!leavingRole) {
@@ -638,17 +632,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       console.log(`Tier roles found: ${tierRoles}`);
       console.log(`Realistic roles found: ${realisticRoles}`);
 
-      // Main summary choice in F (based on Sunday)
-      let mainChoice = "Reserve Seat";
-      if (sundayChoice.includes("Full Time")) mainChoice = "Full Time Seat";
-      if (sundayChoice.includes("Not Participating")) mainChoice = "Reserve Seat";
-
       await logToSheet({
         displayName,
         username: user.username,
         tierRoles,
         realisticRoles,
-        choice: mainChoice,
+        sundayChoice,
+        wednesdayChoice,
         timestamp: formatTimestamp(),
         membershipText,
         joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
@@ -661,7 +651,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await updateSignupSummaryMessage(client, interaction.guildId);
 
-      if (mainChoice !== "Leaving TTRL" && autoRoleByChoice.has(mainChoice)) {
+      // Optional auto-role keyed off Sunday summary (Full Time / Reserve)
+      let mainChoice = "Reserve Seat";
+      if (sundayChoice.includes("Full Time")) mainChoice = "Full Time Seat";
+      if (sundayChoice === "Leaving TTRL") mainChoice = "Leaving TTRL";
+
+      if (autoRoleByChoice.has(mainChoice)) {
         const roleId = autoRoleByChoice.get(mainChoice);
         try { await member.roles.add(roleId); }
         catch (err) { console.error("Auto-role failed:", err.message); }
@@ -673,7 +668,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `• Sunday: **${sundayChoice}**`,
           `• Wednesday: **${wednesdayChoice}**`,
           "",
-          `Main signup choice stored as: **${mainChoice}**. A DM has been sent.`
+          `Summary choice for roles/stats: **${mainChoice}**. A DM has been sent.`
         ].join("\n")
       });
 
@@ -681,7 +676,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         "Your TTRL signup has been recorded:",
         `Sunday: ${sundayChoice}`,
         `Wednesday: ${wednesdayChoice}`,
-        `Main summary choice: ${mainChoice}`
+        `Summary choice: ${mainChoice}`
       ].join("\n")).catch(() => {});
 
       return;
