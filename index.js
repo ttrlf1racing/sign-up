@@ -1,5 +1,6 @@
 // ====================================================================
 //  TTRL SIGNUP BOT – OPTION A FLOW (SUNDAY + WEDNESDAY) + LEAVING + LEAVING NOTIF
+//  MODIFIED: Updates existing user rows instead of creating duplicates
 // ====================================================================
 
 require('dotenv').config();
@@ -34,7 +35,7 @@ console.log("  GOOGLE_PRIVATE_KEY length:", process.env.GOOGLE_PRIVATE_KEY?.leng
 const googleAuth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\\\n/g, "\\n"),
   },
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
@@ -71,14 +72,24 @@ function formatMembership(joinedTimestamp) {
   return `${years} Years ${months}m`;
 }
 
-async function hasAlreadySubmitted(name) {
+// ---------------------------------------------------------------------
+// CHECK IF USER EXISTS & GET ROW NUMBER - NEW
+// ---------------------------------------------------------------------
+async function findExistingUserRow(name) {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!B:B"
+    range: "Sheet1!B:B" // Display Name column
   });
   const rows = res.data.values || [];
-  return rows.some(row => row[0] === name);
+  
+  // Find the row index (1-indexed, skip header row 1)
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === name) {
+      return i + 1; // Return actual sheet row number
+    }
+  }
+  return null; // Not found
 }
 
 // ---------------------------------------------------------------------
@@ -165,11 +176,15 @@ async function updateSignupSummaryMessage(client, guildId) {
 }
 
 // ---------------------------------------------------------------------
-// LOG TO SHEET – layout A:N
+// UPDATE EXISTING ROW OR APPEND NEW – MODIFIED
 // ---------------------------------------------------------------------
 
-async function logToSheet(entry) {
+async function updateOrAppendToSheet(entry) {
   const sheets = await getSheetsClient();
+  
+  // Check if user already exists
+  const existingRow = await findExistingUserRow(entry.displayName);
+  
   const values = [[
     entry.timestamp,        // A
     entry.displayName,      // B
@@ -187,12 +202,25 @@ async function logToSheet(entry) {
     entry.boostStatus       // N
   ]];
 
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!A:N",
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values }
-  });
+  if (existingRow) {
+    // UPDATE existing row
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `Sheet1!A${existingRow}:N${existingRow}`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values }
+    });
+    console.log(`✓ Updated existing row ${existingRow} for ${entry.displayName}`);
+  } else {
+    // APPEND new row
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "Sheet1!A:N",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values }
+    });
+    console.log(`✓ Appended new row for ${entry.displayName}`);
+  }
 }
 
 // =====================================================================
@@ -270,11 +298,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
             "If you are leaving the league, use the **Leaving TTRL** button below.",
           ].join("\n"))
           .setThumbnail("attachment://ttrl-logo.png")
-          .setColor(0xA020F0); // purple
+          .setColor(0xA020F0);
 
         const file = new AttachmentBuilder("ttrl-logo.png");
 
-        // Row 1 – Sunday options (Option A, first step)
         const sundayRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId("ttrlchoice|sunday|fulltime")
@@ -290,7 +317,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             .setStyle(ButtonStyle.Secondary),
         );
 
-        // Row 2 – Leaving button (always visible, separate)
         const leavingRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId("ttrlchoice|leaving|start")
@@ -361,7 +387,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       return;
     }
-
     // =================================================================
     // BUTTON HANDLING
     // =================================================================
@@ -453,7 +478,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         console.log(`Tier roles found: ${tierRoles}`);
         console.log(`Realistic roles found: ${realisticRoles}`);
 
-        await logToSheet({
+        // MODIFIED: Use updateOrAppendToSheet instead of logToSheet
+        await updateOrAppendToSheet({
           displayName,
           username: user.username,
           tierRoles,
@@ -472,40 +498,38 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await updateSignupSummaryMessage(client, interaction.guildId);
 
-        // === NEW: Leaving Channel Notification ===
-const LEAVING_CHANNEL_ID = process.env.LEAVING_CHANNEL_ID;
-console.log("Leaving debug – env LEAVING_CHANNEL_ID:", LEAVING_CHANNEL_ID);
+        // Leaving Channel Notification
+        const LEAVING_CHANNEL_ID = process.env.LEAVING_CHANNEL_ID;
+        console.log("Leaving debug – env LEAVING_CHANNEL_ID:", LEAVING_CHANNEL_ID);
 
-try {
-  const guild = interaction.guild;
-  console.log("Leaving debug – guild id/name:", guild?.id, guild?.name);
+        try {
+          const guild = interaction.guild;
+          console.log("Leaving debug – guild id/name:", guild?.id, guild?.name);
 
-  const leavingChannel =
-    guild.channels.cache.get(LEAVING_CHANNEL_ID) ||
-    await guild.channels.fetch(LEAVING_CHANNEL_ID).catch(() => null);
+          const leavingChannel =
+            guild.channels.cache.get(LEAVING_CHANNEL_ID) ||
+            await guild.channels.fetch(LEAVING_CHANNEL_ID).catch(() => null);
 
-  console.log(
-    "Leaving debug – resolved channel:",
-    leavingChannel ? `${leavingChannel.id} / ${leavingChannel.name}` : "NONE"
-  );
+          console.log(
+            "Leaving debug – resolved channel:",
+            leavingChannel ? `${leavingChannel.id} / ${leavingChannel.name}` : "NONE"
+          );
 
-  if (leavingChannel && leavingChannel.isTextBased()) {
-    const embed = new EmbedBuilder()
-      .setTitle("Driver Leaving TTRL")
-      .setDescription(`${member} has indicated they wish to leave TTRL.`)
-      .setColor(0xFF0000)
-      .setTimestamp();
+          if (leavingChannel && leavingChannel.isTextBased()) {
+            const embed = new EmbedBuilder()
+              .setTitle("Driver Leaving TTRL")
+              .setDescription(`${member} has indicated they wish to leave TTRL.`)
+              .setColor(0xFF0000)
+              .setTimestamp();
 
-    await leavingChannel.send({ embeds: [embed] });
-    console.log(`Leaving notification sent to ${leavingChannel.name} for ${displayName}`);
-  } else {
-    console.log("Leaving debug – channel not found or not text-based");
-  }
-} catch (err) {
-  console.error("Failed to send leaving notification:", err);
-}
-// === END NEW ===
-
+            await leavingChannel.send({ embeds: [embed] });
+            console.log(`Leaving notification sent to ${leavingChannel.name} for ${displayName}`);
+          } else {
+            console.log("Leaving debug – channel not found or not text-based");
+          }
+        } catch (err) {
+          console.error("Failed to send leaving notification:", err);
+        }
 
         const leavingRoleId = "1460986192966455449";
         const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
@@ -623,11 +647,12 @@ try {
       const displayName = member.displayName || member.user.username;
       const membershipText = formatMembership(member.joinedTimestamp || Date.now());
 
-      if (await hasAlreadySubmitted(displayName)) {
-        return interaction.editReply({
-          content: "You have already submitted your signup."
-        });
-      }
+      // REMOVED: Duplicate check - we now allow updates
+      // if (await hasAlreadySubmitted(displayName)) {
+      //   return interaction.editReply({
+      //     content: "You have already submitted your signup."
+      //   });
+      // }
 
       const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
 
@@ -653,7 +678,8 @@ try {
       console.log(`Tier roles found: ${tierRoles}`);
       console.log(`Realistic roles found: ${realisticRoles}`);
 
-      await logToSheet({
+      // MODIFIED: Use updateOrAppendToSheet instead of logToSheet
+      await updateOrAppendToSheet({
         displayName,
         username: user.username,
         tierRoles,
