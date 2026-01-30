@@ -1,5 +1,5 @@
 // ====================================================================
-//  TTRL SIGNUP BOT – OPTION A FLOW (SUNDAY + WEDNESDAY) + LEAVING
+//  TTRL SIGNUP BOT – OPTION A FLOW (SUNDAY + WEDNESDAY) + LEAVING + LEAVING NOTIF
 // ====================================================================
 
 require('dotenv').config();
@@ -166,20 +166,6 @@ async function updateSignupSummaryMessage(client, guildId) {
 
 // ---------------------------------------------------------------------
 // LOG TO SHEET – layout A:N
-// A Timestamp
-// B Display Name
-// C Username
-// D Current Tier Role
-// E Current Realistic Role
-// F Sunday Choice
-// G Wednesday Choice
-// H How long in Server
-// I Join Date
-// J User ID
-// K Account Created
-// L Avatar URL
-// M All Current Roles
-// N Boost Status
 // ---------------------------------------------------------------------
 
 async function logToSheet(entry) {
@@ -486,6 +472,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await updateSignupSummaryMessage(client, interaction.guildId);
 
+        // === NEW: Leaving Channel Notification ===
+        const LEAVING_CHANNEL_ID = process.env.LEAVING_CHANNEL_ID || "1460997377497239572";
+        if (LEAVING_CHANNEL_ID) {
+          try {
+            const leavingChannel = interaction.guild.channels.cache.get(LEAVING_CHANNEL_ID);
+            if (leavingChannel) {
+              const embed = new EmbedBuilder()
+                .setTitle("Driver Leaving TTRL")
+                .setDescription(`${member} has indicated they wish to leave TTRL.`)
+                .setColor(0xFF0000)  // Red for leaving
+                .setTimestamp();
+              await leavingChannel.send({ embeds: [embed] });
+              console.log(`Leaving notification sent to ${leavingChannel.name} for ${displayName}`);
+            }
+          } catch (err) {
+            console.error("Failed to send leaving notification:", err);
+          }
+        }
+        // === END NEW ===
+
         const leavingRoleId = "1460986192966455449";
         const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
 
@@ -651,31 +657,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await updateSignupSummaryMessage(client, interaction.guildId);
 
-     // Optional auto-role keyed off Sunday summary (Full Time / Reserve)
-let mainChoice = "Reserve Seat";
-if (sundayChoice.includes("Full Time")) mainChoice = "Full Time Seat";
-if (sundayChoice === "Leaving TTRL") mainChoice = "Leaving TTRL";
+      // Optional auto-role keyed off Sunday summary (Full Time / Reserve)
+      let mainChoice = "Reserve Seat";
+      if (sundayChoice.includes("Full Time")) mainChoice = "Full Time Seat";
+      if (sundayChoice === "Leaving TTRL") mainChoice = "Leaving TTRL";
 
-if (autoRoleByChoice.has(mainChoice)) {
-  const roleId = autoRoleByChoice.get(mainChoice);
-  try { await member.roles.add(roleId); }
-  catch (err) { console.error("Auto-role failed:", err.message); }
-}
+      if (autoRoleByChoice.has(mainChoice)) {
+        const roleId = autoRoleByChoice.get(mainChoice);
+        try { await member.roles.add(roleId); }
+        catch (err) { console.error("Auto-role failed:", err.message); }
+      }
 
-await interaction.editReply({
-  content: [
-    "Your signup has been recorded:",
-    `• Sunday: **${sundayChoice}**`,
-    `• Wednesday: **${wednesdayChoice}**`,
-    "",
-  ].join("\n")
-});
+      await interaction.editReply({
+        content: [
+          "Your signup has been recorded:",
+          `• Sunday: **${sundayChoice}**`,
+          `• Wednesday: **${wednesdayChoice}**`,
+          "",
+        ].join("\n")
+      });
 
-member.send([
-  "Your TTRL signup has been recorded:",
-  `Sunday: ${sundayChoice}`,
-  `Wednesday: ${wednesdayChoice}`,
-].join("\n")).catch(() => {});
+      member.send([
+        "Your TTRL signup has been recorded:",
+        `Sunday: ${sundayChoice}`,
+        `Wednesday: ${wednesdayChoice}`,
+      ].join("\n")).catch(() => {});
 
       return;
     }
