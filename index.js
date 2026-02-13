@@ -89,8 +89,7 @@ async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!F:F" // F = Sunday Choice
-  });
+    range: "Sheet1!F:G" // F = Sunday Choice, G = Wednesday Choice  });
 
   const rows = res.data.values || [];
   const summary = {
@@ -98,16 +97,21 @@ async function getSignupSummaryFromSheets() {
     fullTimeSeat: 0,
     reserveSeat: 0,
     leaving: 0,
+        wednesdayFullTime: 0,
+        wednesdayReserve: 0,
+        wednesdaySkip: 0,
   };
 
   for (let i = 1; i < rows.length; i++) {
-    const [sundayChoice] = rows[i];
-    if (!sundayChoice) continue;
-    summary.total++;
+    if (!sundayChoice && !wednesdayChoice) continue;    summary.total++;
 
     if (sundayChoice.includes("Full Time")) summary.fullTimeSeat++;
     else if (sundayChoice.includes("Reserve")) summary.reserveSeat++;
     else if (sundayChoice === "Leaving TTRL") summary.leaving++;
+
+        if (wednesdayChoice?.includes("Full Time")) summary.wednesdayFullTime++;
+        else if (wednesdayChoice?.includes("Reserve")) summary.wednesdayReserve++;
+        else if (wednesdayChoice?.includes("Not Participating")) summary.wednesdaySkip++;
   }
 
   return summary;
@@ -121,6 +125,10 @@ function formatSignupSummaryText(summary) {
     "",
     `Full Time (Sunday): ${summary.fullTimeSeat}`,
     `Reserve (Sunday): ${summary.reserveSeat}`,
+        "",
+        `Full Time (Wednesday): ${summary.wednesdayFullTime}`,
+        `Reserve (Wednesday): ${summary.wednesdayReserve}`,
+        `Skip Wednesday: ${summary.wednesdaySkip}`,
     `Leaving TTRL: ${summary.leaving}`,
   ].join("\n");
 }
