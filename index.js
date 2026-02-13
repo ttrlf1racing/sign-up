@@ -104,7 +104,9 @@ async function getSignupSummaryFromSheets() {
   };
 
   for (let i = 1; i < rows.length; i++) {
-    if (!sundayChoice && !wednesdayChoice) continue;    summary.total++;
+    const [sundayChoice, wednesdayChoice] = rows[i] || [];
+    if (!sundayChoice && !wednesdayChoice) continue;    
+    summary.total++;
 
     if (sundayChoice.includes("Full Time")) summary.fullTimeSeat++;
     else if (sundayChoice.includes("Reserve")) summary.reserveSeat++;
