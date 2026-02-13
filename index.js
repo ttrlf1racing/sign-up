@@ -89,7 +89,8 @@ async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!F:G" // F = Sunday Choice, G = Wednesday Choice  });
+    range: "Sheet1!F:G" // F = Sunday Choice, G = Wednesday Choice 
+        });
 
   const rows = res.data.values || [];
   const summary = {
