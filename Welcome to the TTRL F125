@@ -23,9 +23,9 @@ const { google } = require('googleapis');
 // ---------------------------------------------------------------------
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
 
-const statsChannelByGuild = new Map();           // guild → stats channel
-const autoRoleByChoice = new Map();              // choice → role ID
-const pendingSignup = new Map();                 // userId → { sundayChoice, guildId }
+const statsChannelByGuild = new Map();   // guild → stats channel
+const autoRoleByChoice = new Map();      // choice → role ID
+const pendingSignup = new Map();         // userId → { sundayChoice, guildId }
 
 console.log("Google ENV:");
 console.log("  GOOGLE_SPREADSHEET_ID:", SPREADSHEET_ID);
@@ -35,9 +35,7 @@ console.log("  GOOGLE_PRIVATE_KEY length:", process.env.GOOGLE_PRIVATE_KEY?.leng
 const googleAuth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/
-/g, '
-'),
+    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
   },
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
@@ -59,7 +57,7 @@ async function getSheetsClient() {
 
 function formatTimestamp(date = new Date()) {
   const pad = n => n.toString().padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function formatMembership(joinedTimestamp) {
@@ -92,7 +90,7 @@ async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!F:G" // F = Sunday Choice, G = Wednesday Choice
+    range: "Sheet1!F:G"
   });
 
   const rows = res.data.values || [];
@@ -108,6 +106,7 @@ async function getSignupSummaryFromSheets() {
   for (let i = 1; i < rows.length; i++) {
     const [sundayChoice, wednesdayChoice] = rows[i] || [];
     if (!sundayChoice && !wednesdayChoice) continue;
+
     summary.total++;
 
     if (sundayChoice?.includes("Full Time")) summary.fullTimeSeat++;
@@ -133,14 +132,13 @@ function formatSignupSummaryText(summary) {
     `Full Time (Wednesday): ${summary.wednesdayFullTime}`,
     `Reserve (Wednesday): ${summary.wednesdayReserve}`,
     `Skip Wednesday: ${summary.wednesdaySkip}`,
-  ].join("
-");
+  ].join("\n");
 }
 
 async function updateSignupSummaryMessage(client, guildId) {
   const channelId = statsChannelByGuild.get(guildId);
   if (!channelId) return;
-  
+
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased()) return;
 
@@ -150,6 +148,7 @@ async function updateSignupSummaryMessage(client, guildId) {
   async function findSummary() {
     let lastId = null;
     let fetched = 0;
+
     while (fetched < 500) {
       const opts = { limit: 100 };
       if (lastId) opts.before = lastId;
@@ -167,6 +166,7 @@ async function updateSignupSummaryMessage(client, guildId) {
 
       lastId = msgs.last().id;
     }
+
     return null;
   }
 
@@ -224,17 +224,14 @@ client.once(Events.ClientReady, (c) => {
 // =====================================================================
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-
     // =================================================================
     // SLASH COMMANDS
     // =================================================================
     if (interaction.isChatInputCommand()) {
-
       // ===============================================================
       // /ttrl-signup
       // ===============================================================
       if (interaction.commandName === "ttrl-signup") {
-
         if (!interaction.inGuild()) {
           return interaction.reply({ content: "Use this in a server.", flags: 64 });
         }
@@ -280,8 +277,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             "Step 2: Choose your **Wednesday Realistic** status.",
             "",
             "You can be Full Time, Reserve, or skip either day.",
-          ].join("
-"))
+          ].join("\n"))
           .setThumbnail("attachment://ttrl-logo.png")
           .setColor(0xA020F0);
 
@@ -310,7 +306,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await interaction.reply({ content: "Signup panel posted.", flags: 64 });
         await updateSignupSummaryMessage(client, interaction.guildId);
-
         return;
       }
 
@@ -388,9 +383,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     };
 
     // --------------------------------------------------------------
-    // SUNDAY / WEDNESDAY FLOW
+    // SUNDAY STEP
     // --------------------------------------------------------------
-
     if (section === "sunday") {
       const sundayChoice = sundayLabelMap[action] || "Unknown (Sunday)";
 
@@ -415,8 +409,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       );
 
       await interaction.reply({
-        content: `Sunday choice recorded: **${sundayChoice}**.
-Now choose your **Wednesday Realistic** status:`,
+        content: `Sunday choice recorded: **${sundayChoice}**.\nNow choose your **Wednesday Realistic** status:`,
         components: [wedRow],
         flags: 64,
       });
@@ -424,6 +417,9 @@ Now choose your **Wednesday Realistic** status:`,
       return;
     }
 
+    // --------------------------------------------------------------
+    // WEDNESDAY STEP
+    // --------------------------------------------------------------
     if (section === "wednesday") {
       const pending = pendingSignup.get(interaction.user.id);
       if (!pending || pending.guildId !== interaction.guildId) {
@@ -446,6 +442,7 @@ Now choose your **Wednesday Realistic** status:`,
       if (!member) {
         member = await interaction.guild.members.fetch(user.id).catch(() => null);
       }
+
       if (!member) {
         return interaction.editReply({ content: "Could not load your member data." });
       }
@@ -520,22 +517,19 @@ Now choose your **Wednesday Realistic** status:`,
           `• Sunday: **${sundayChoice}**`,
           `• Wednesday: **${wednesdayChoice}**`,
           "",
-        ].join("\
-")
+        ].join("\n")
       });
 
       member.send([
         "Your TTRL signup has been recorded:",
         `Sunday: ${sundayChoice}`,
         `Wednesday: ${wednesdayChoice}`,
-      ].join("\
-")).catch(() => {});
+      ].join("\n")).catch(() => {});
 
       return;
     }
 
     return;
-
   } catch (err) {
     console.error("Interaction error:", err);
     try {
