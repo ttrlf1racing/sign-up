@@ -268,20 +268,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
         }
 
-  .setDescription([
-  "Welcome to the **TTRL F125 Season 5** sign-up.",
-  "",
-  "🏁 **Sunday:** 4 paced tiers",
-  "🏁 **Wednesday:** 2 paced tiers",
-  "🕗 **All races start at 8pm UK time**",
-  "",
-  "Get yourself locked in for the new season below.",
-  "",
-  "**Step 1:** Choose your **Sunday Tier** status.",
-  "**Step 2:** Choose your **Wednesday Realistic** status.",
-  "",
-  "Select **Full Time**, **Reserve**, or **Skip** for each race day.",
-].join("\n"))
+        const embed = new EmbedBuilder()
+          .setTitle("F125 Season 5 Sign-Up")
+          .setDescription([
+            "Welcome to the **TTRL F125 Season 5** sign-up.",
+            "",
+            "🏁 **Sunday:** 4 paced tiers",
+            "🏁 **Wednesday:** 2 paced tiers",
+            "🕗 **All races start at 8pm UK time**",
+            "",
+            "Get yourself locked in for the new season below.",
+            "",
+            "**Step 1:** Choose your **Sunday Tier** status.",
+            "**Step 2:** Choose your **Wednesday Realistic** status.",
+            "",
+            "Select **Full Time**, **Reserve**, or **Skip** for each race day.",
+          ].join("\n"))
           .setThumbnail("attachment://ttrl-logo.png")
           .setColor(0xA020F0);
 
@@ -471,12 +473,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         })
         .map(r => r.name);
 
-const realisticRolesArr = rolesExcludingEveryone
-  .filter(r => {
-    const name = r.name;
-    return name.includes("Real R") && (name.includes("FT") || name.includes("Res"));
-  })
-  .map(r => r.name);
+      const realisticRolesArr = rolesExcludingEveryone
+        .filter(r => {
+          const name = r.name;
+          return name.includes("Real R") && (name.includes("FT") || name.includes("Res"));
+        })
+        .map(r => r.name);
 
       const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
       const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
