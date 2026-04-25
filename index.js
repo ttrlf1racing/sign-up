@@ -467,12 +467,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         })
         .map(r => r.name);
 
-      const realisticRolesArr = rolesExcludingEveryone
-        .filter(r => {
-          const name = r.name;
-          return name.includes("Realistic") && (name.includes("- FT") || name.includes("- Res"));
-        })
-        .map(r => r.name);
+const realisticRolesArr = rolesExcludingEveryone
+  .filter(r => {
+    const name = r.name;
+    return name.includes("Real R") && (name.includes("FT") || name.includes("Res"));
+  })
+  .map(r => r.name);
 
       const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
       const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
