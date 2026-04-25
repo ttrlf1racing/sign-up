@@ -20,8 +20,7 @@ const commands = [
         .setRequired(true)
         .addChoices(
           { name: 'Full Time Seat', value: 'Full Time Seat' },
-          { name: 'Reserve Seat', value: 'Reserve Seat' },
-          { name: 'Leaving TTRL', value: 'Leaving TTRL' },
+          { name: 'Reserve Seat', value: 'Reserve Seat' }
         ))
     .addRoleOption(option =>
       option.setName('role')
