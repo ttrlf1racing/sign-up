@@ -35,7 +35,9 @@ console.log("  GOOGLE_PRIVATE_KEY length:", process.env.GOOGLE_PRIVATE_KEY?.leng
 const googleAuth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\\\n/g, "\\n"),
+    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/
+/g, '
+'),
   },
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
@@ -131,7 +133,8 @@ function formatSignupSummaryText(summary) {
     `Full Time (Wednesday): ${summary.wednesdayFullTime}`,
     `Reserve (Wednesday): ${summary.wednesdayReserve}`,
     `Skip Wednesday: ${summary.wednesdaySkip}`,
-  ].join("\\n");
+  ].join("
+");
 }
 
 async function updateSignupSummaryMessage(client, guildId) {
@@ -277,7 +280,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
             "Step 2: Choose your **Wednesday Realistic** status.",
             "",
             "You can be Full Time, Reserve, or skip either day.",
-          ].join("\\n"))
+          ].join("
+"))
           .setThumbnail("attachment://ttrl-logo.png")
           .setColor(0xA020F0);
 
@@ -411,7 +415,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       );
 
       await interaction.reply({
-        content: `Sunday choice recorded: **${sundayChoice}**.\\nNow choose your **Wednesday Realistic** status:`,
+        content: `Sunday choice recorded: **${sundayChoice}**.
+Now choose your **Wednesday Realistic** status:`,
         components: [wedRow],
         flags: 64,
       });
@@ -515,14 +520,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `• Sunday: **${sundayChoice}**`,
           `• Wednesday: **${wednesdayChoice}**`,
           "",
-        ].join("\\n")
+        ].join("\
+")
       });
 
       member.send([
         "Your TTRL signup has been recorded:",
         `Sunday: ${sundayChoice}`,
         `Wednesday: ${wednesdayChoice}`,
-      ].join("\\n")).catch(() => {});
+      ].join("\
+")).catch(() => {});
 
       return;
     }
