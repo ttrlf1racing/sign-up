@@ -1,5 +1,6 @@
 // ====================================================================
-//  TTRL SIGNUP BOT – OPTION A FLOW (SUNDAY + WEDNESDAY) + LEAVING + LEAVING NOTIF
+//  TTRL SIGNUP BOT – OPTION A FLOW (SUNDAY + WEDNESDAY)
+//  SEASON 5
 // ====================================================================
 
 require('dotenv').config();
@@ -34,7 +35,7 @@ console.log("  GOOGLE_PRIVATE_KEY length:", process.env.GOOGLE_PRIVATE_KEY?.leng
 const googleAuth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\\\n/g, "\\n"),
   },
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
@@ -89,32 +90,30 @@ async function getSignupSummaryFromSheets() {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Sheet1!F:G" // F = Sunday Choice, G = Wednesday Choice 
-        });
+    range: "Sheet1!F:G" // F = Sunday Choice, G = Wednesday Choice
+  });
 
   const rows = res.data.values || [];
   const summary = {
     total: 0,
     fullTimeSeat: 0,
     reserveSeat: 0,
-    leaving: 0,
-        wednesdayFullTime: 0,
-        wednesdayReserve: 0,
-        wednesdaySkip: 0,
+    wednesdayFullTime: 0,
+    wednesdayReserve: 0,
+    wednesdaySkip: 0,
   };
 
   for (let i = 1; i < rows.length; i++) {
     const [sundayChoice, wednesdayChoice] = rows[i] || [];
-    if (!sundayChoice && !wednesdayChoice) continue;    
+    if (!sundayChoice && !wednesdayChoice) continue;
     summary.total++;
 
-    if (sundayChoice.includes("Full Time")) summary.fullTimeSeat++;
-    else if (sundayChoice.includes("Reserve")) summary.reserveSeat++;
-    else if (sundayChoice === "Leaving TTRL") summary.leaving++;
+    if (sundayChoice?.includes("Full Time")) summary.fullTimeSeat++;
+    else if (sundayChoice?.includes("Reserve")) summary.reserveSeat++;
 
-        if (wednesdayChoice?.includes("Full Time")) summary.wednesdayFullTime++;
-        else if (wednesdayChoice?.includes("Reserve")) summary.wednesdayReserve++;
-        else if (wednesdayChoice?.includes("Not Participating")) summary.wednesdaySkip++;
+    if (wednesdayChoice?.includes("Full Time")) summary.wednesdayFullTime++;
+    else if (wednesdayChoice?.includes("Reserve")) summary.wednesdayReserve++;
+    else if (wednesdayChoice?.includes("Not Participating")) summary.wednesdaySkip++;
   }
 
   return summary;
@@ -128,12 +127,11 @@ function formatSignupSummaryText(summary) {
     "",
     `Full Time (Sunday): ${summary.fullTimeSeat}`,
     `Reserve (Sunday): ${summary.reserveSeat}`,
-        "",
-        `Full Time (Wednesday): ${summary.wednesdayFullTime}`,
-        `Reserve (Wednesday): ${summary.wednesdayReserve}`,
-        `Skip Wednesday: ${summary.wednesdaySkip}`,
-    `Leaving TTRL: ${summary.leaving}`,
-  ].join("\n");
+    "",
+    `Full Time (Wednesday): ${summary.wednesdayFullTime}`,
+    `Reserve (Wednesday): ${summary.wednesdayReserve}`,
+    `Skip Wednesday: ${summary.wednesdaySkip}`,
+  ].join("\\n");
 }
 
 async function updateSignupSummaryMessage(client, guildId) {
@@ -171,8 +169,8 @@ async function updateSignupSummaryMessage(client, guildId) {
 
   const existing = await findSummary();
 
-  if (existing) existing.edit(text);
-  else channel.send(text);
+  if (existing) await existing.edit(text);
+  else await channel.send(text);
 }
 
 // ---------------------------------------------------------------------
@@ -237,10 +235,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!interaction.inGuild()) {
           return interaction.reply({ content: "Use this in a server.", flags: 64 });
         }
+
         const perms = interaction.memberPermissions;
         const admin =
           perms?.has(PermissionsBitField.Flags.Administrator) ||
           perms?.has(PermissionsBitField.Flags.ManageGuild);
+
         if (!admin) {
           return interaction.reply({ content: "Admins only.", flags: 64 });
         }
@@ -260,7 +260,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         statsChannelByGuild.set(interaction.guildId, statsChannel.id);
 
-        const channel = await client.channels.fetch(interaction.channelId);
+        const channel = await client.channels.fetch(interaction.channelId).catch(() => null);
         if (!channel?.isTextBased()) {
           return interaction.reply({
             content: "I cannot post here.",
@@ -269,23 +269,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const embed = new EmbedBuilder()
-          .setTitle("F125 Season 4 Sign-Up")
+          .setTitle("F125 Season 5 Sign-Up")
           .setDescription([
-            "Welcome to the TTRL F125 Season 4 sign-up!",
+            "Welcome to the TTRL F125 Season 5 sign-up!",
             "",
             "Step 1: Choose your **Sunday Tier** status.",
             "Step 2: Choose your **Wednesday Realistic** status.",
             "",
             "You can be Full Time, Reserve, or skip either day.",
-            "",
-            "If you are leaving the league, use the **Leaving TTRL** button below.",
-          ].join("\n"))
+          ].join("\\n"))
           .setThumbnail("attachment://ttrl-logo.png")
-          .setColor(0xA020F0); // purple
+          .setColor(0xA020F0);
 
         const file = new AttachmentBuilder("ttrl-logo.png");
 
-        // Row 1 – Sunday options (Option A, first step)
         const sundayRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId("ttrlchoice|sunday|fulltime")
@@ -301,17 +298,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
             .setStyle(ButtonStyle.Secondary),
         );
 
-        // Row 2 – Leaving button (always visible, separate)
-        const leavingRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId("ttrlchoice|leaving|start")
-            .setLabel("Leaving TTRL")
-            .setStyle(ButtonStyle.Danger),
-        );
-
         await channel.send({
           embeds: [embed],
-          components: [sundayRow, leavingRow],
+          components: [sundayRow],
           files: [file]
         });
 
@@ -331,6 +320,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const admin =
           perms?.has(PermissionsBitField.Flags.Administrator) ||
           perms?.has(PermissionsBitField.Flags.ManageGuild);
+
         if (!admin) {
           return interaction.reply({ content: "Admins only.", flags: 64 });
         }
@@ -394,184 +384,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     };
 
     // --------------------------------------------------------------
-    // LEAVING TTRL FLOW
-    // --------------------------------------------------------------
-    if (section === "leaving") {
-      if (action === "start") {
-        await interaction.reply({
-          content: "Are you sure you want to leave our great league?\n\nPlease note after clicking this button you will lose your current roles and be moved to the leaving channel.",
-          components: [
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder()
-                .setCustomId("ttrlchoice|leaving|confirm")
-                .setLabel("Yes, I want to leave")
-                .setStyle(ButtonStyle.Danger),
-              new ButtonBuilder()
-                .setCustomId("ttrlchoice|leaving|cancel")
-                .setLabel("Cancel")
-                .setStyle(ButtonStyle.Secondary),
-            )
-          ],
-          flags: 64,
-        });
-        return;
-      }
-
-      if (action === "cancel") {
-        await interaction.reply({
-          content: "Leaving cancelled. Your roles will not be changed.",
-          flags: 64,
-        });
-        return;
-      }
-
-      if (action === "confirm") {
-        await interaction.deferReply({ flags: 64 });
-
-        const user = interaction.user;
-        let member = interaction.member;
-        if (!member) {
-          member = await interaction.guild.members.fetch(user.id).catch(() => null);
-        }
-        if (!member) {
-          return interaction.editReply({ content: "Could not load your member data." });
-        }
-
-        const displayName = member.displayName || member.user.username;
-        const membershipText = formatMembership(member.joinedTimestamp || Date.now());
-
-        const rolesExcludingEveryone = member.roles.cache.filter(r => r.id !== interaction.guild.id);
-
-        console.log(`Member ${displayName} roles:`, rolesExcludingEveryone.map(r => r.name).join(", "));
-
-        const tierRolesArr = rolesExcludingEveryone
-          .filter(r => {
-            const name = r.name;
-            return name.includes("Tier") && (name.includes("- FT") || name.includes("- Res"));
-          })
-          .map(r => r.name);
-
-        const realisticRolesArr = rolesExcludingEveryone
-          .filter(r => {
-            const name = r.name;
-            return name.includes("Realistic") && (name.includes("- FT") || name.includes("- Res"));
-          })
-          .map(r => r.name);
-
-        const tierRoles = tierRolesArr.length > 0 ? tierRolesArr.join(", ") : "None";
-        const realisticRoles = realisticRolesArr.length > 0 ? realisticRolesArr.join(", ") : "None";
-
-        console.log(`Tier roles found: ${tierRoles}`);
-        console.log(`Realistic roles found: ${realisticRoles}`);
-
-        await logToSheet({
-          displayName,
-          username: user.username,
-          tierRoles,
-          realisticRoles,
-          sundayChoice: "Leaving TTRL",
-          wednesdayChoice: "Leaving TTRL",
-          timestamp: formatTimestamp(),
-          membershipText,
-          joinDate: member.joinedAt?.toISOString().split("T")[0] || "Unknown",
-          userId: member.id,
-          accountCreated: member.user.createdAt.toISOString().split("T")[0],
-          avatarUrl: member.user.displayAvatarURL({ size: 256 }),
-          allRoles: rolesExcludingEveryone.map(r => r.name).join(", ") || "None",
-          boostStatus: member.premiumSince ? `Since ${member.premiumSince.toISOString().split("T")[0]}` : "Not boosting"
-        });
-
-        await updateSignupSummaryMessage(client, interaction.guildId);
-
-        // === NEW: Leaving Channel Notification ===
-const LEAVING_CHANNEL_ID = process.env.LEAVING_CHANNEL_ID;
-console.log("Leaving debug – env LEAVING_CHANNEL_ID:", LEAVING_CHANNEL_ID);
-
-try {
-  const guild = interaction.guild;
-  console.log("Leaving debug – guild id/name:", guild?.id, guild?.name);
-
-  const leavingChannel =
-    guild.channels.cache.get(LEAVING_CHANNEL_ID) ||
-    await guild.channels.fetch(LEAVING_CHANNEL_ID).catch(() => null);
-
-  console.log(
-    "Leaving debug – resolved channel:",
-    leavingChannel ? `${leavingChannel.id} / ${leavingChannel.name}` : "NONE"
-  );
-
-  if (leavingChannel && leavingChannel.isTextBased()) {
-    const embed = new EmbedBuilder()
-      .setTitle("Driver Leaving TTRL")
-      .setDescription(`${member} has indicated they wish to leave TTRL.`)
-      .setColor(0xFF0000)
-      .setTimestamp();
-
-    await leavingChannel.send({ embeds: [embed] });
-    console.log(`Leaving notification sent to ${leavingChannel.name} for ${displayName}`);
-  } else {
-    console.log("Leaving debug – channel not found or not text-based");
-  }
-} catch (err) {
-  console.error("Failed to send leaving notification:", err);
-}
-// === END NEW ===
-
-
-        const leavingRoleId = "1460986192966455449";
-        const leavingRole = interaction.guild.roles.cache.get(leavingRoleId);
-
-        if (!leavingRole) {
-          console.error("Leaving role not found in guild:", leavingRoleId);
-        } else {
-          try {
-            const botMember = await interaction.guild.members.fetchMe();
-            const botPosition = botMember.roles.highest.position;
-
-            const rolesToRemove = member.roles.cache.filter(r =>
-              r.id !== interaction.guild.id &&
-              r.id !== leavingRoleId &&
-              r.position < botPosition
-            );
-
-            for (const [, role] of rolesToRemove) {
-              try {
-                await member.roles.remove(role);
-              } catch (err) {
-                console.error(`Failed to remove role ${role.name}:`, err);
-              }
-            }
-
-            if (leavingRole.position < botPosition && !member.roles.cache.has(leavingRoleId)) {
-              try {
-                await member.roles.add(leavingRole);
-              } catch (err) {
-                console.error("Failed to add Leaving role:", err);
-              }
-            } else if (leavingRole.position >= botPosition) {
-              console.error("Bot cannot manage Leaving role (position too high).");
-            }
-          } catch (err) {
-            console.error("Failed to update roles for Leaving TTRL:", err);
-          }
-        }
-
-        await interaction.editReply({
-          content: "Your choice **Leaving TTRL** has been recorded. A DM has been sent."
-        });
-
-        member.send("Your TTRL signup choice has been recorded as: Leaving TTRL.").catch(() => {});
-        return;
-      }
-
-      return;
-    }
-
-    // --------------------------------------------------------------
     // SUNDAY / WEDNESDAY FLOW
     // --------------------------------------------------------------
 
-    // SUNDAY STEP
     if (section === "sunday") {
       const sundayChoice = sundayLabelMap[action] || "Unknown (Sunday)";
 
@@ -596,7 +411,7 @@ try {
       );
 
       await interaction.reply({
-        content: `Sunday choice recorded: **${sundayChoice}**.\nNow choose your **Wednesday Realistic** status:`,
+        content: `Sunday choice recorded: **${sundayChoice}**.\\nNow choose your **Wednesday Realistic** status:`,
         components: [wedRow],
         flags: 64,
       });
@@ -604,7 +419,6 @@ try {
       return;
     }
 
-    // WEDNESDAY STEP (finalise signup)
     if (section === "wednesday") {
       const pending = pendingSignup.get(interaction.user.id);
       if (!pending || pending.guildId !== interaction.guildId) {
@@ -683,15 +497,16 @@ try {
 
       await updateSignupSummaryMessage(client, interaction.guildId);
 
-      // Optional auto-role keyed off Sunday summary (Full Time / Reserve)
       let mainChoice = "Reserve Seat";
       if (sundayChoice.includes("Full Time")) mainChoice = "Full Time Seat";
-      if (sundayChoice === "Leaving TTRL") mainChoice = "Leaving TTRL";
 
       if (autoRoleByChoice.has(mainChoice)) {
         const roleId = autoRoleByChoice.get(mainChoice);
-        try { await member.roles.add(roleId); }
-        catch (err) { console.error("Auto-role failed:", err.message); }
+        try {
+          await member.roles.add(roleId);
+        } catch (err) {
+          console.error("Auto-role failed:", err.message);
+        }
       }
 
       await interaction.editReply({
@@ -700,14 +515,14 @@ try {
           `• Sunday: **${sundayChoice}**`,
           `• Wednesday: **${wednesdayChoice}**`,
           "",
-        ].join("\n")
+        ].join("\\n")
       });
 
       member.send([
         "Your TTRL signup has been recorded:",
         `Sunday: ${sundayChoice}`,
         `Wednesday: ${wednesdayChoice}`,
-      ].join("\n")).catch(() => {});
+      ].join("\\n")).catch(() => {});
 
       return;
     }
