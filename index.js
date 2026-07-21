@@ -22,6 +22,7 @@ const { google } = require('googleapis');
 // GOOGLE SHEETS SETUP
 // ---------------------------------------------------------------------
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID;
+const SIGNUP_STATS_CHANNEL_ID = process.env.SIGNUP_STATS_CHANNEL_ID;
 
 const statsChannelByGuild = new Map();   // guild → stats channel
 const autoRoleByChoice = new Map();      // choice → role ID
@@ -136,11 +137,22 @@ function formatSignupSummaryText(summary) {
 }
 
 async function updateSignupSummaryMessage(client, guildId) {
-  const channelId = statsChannelByGuild.get(guildId);
-  if (!channelId) return;
+  // The slash command value is useful as a live override, while the
+  // environment variable survives bot restarts and Railway deployments.
+  const channelId = statsChannelByGuild.get(guildId) || SIGNUP_STATS_CHANNEL_ID;
+  if (!channelId) {
+    console.warn(
+      `Signup summary not updated for guild ${guildId}: ` +
+      "SIGNUP_STATS_CHANNEL_ID is not configured."
+    );
+    return;
+  }
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased()) return;
+  if (!channel?.isTextBased()) {
+    console.warn(`Signup summary channel ${channelId} was not found or is not text-based.`);
+    return;
+  }
 
   const summary = await getSignupSummaryFromSheets();
   const text = formatSignupSummaryText(summary);
@@ -217,6 +229,14 @@ const client = new Client({
 
 client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);
+  if (SIGNUP_STATS_CHANNEL_ID) {
+    console.log(`Persistent signup summary channel: ${SIGNUP_STATS_CHANNEL_ID}`);
+  } else {
+    console.warn(
+      "SIGNUP_STATS_CHANNEL_ID is not configured; summary updates will stop after a restart " +
+      "until /ttrl-signup is run again."
+    );
+  }
 });
 
 // =====================================================================
