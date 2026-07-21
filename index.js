@@ -1,6 +1,6 @@
 // ====================================================================
 //  TTRL SIGNUP BOT – OPTION A FLOW (SUNDAY + WEDNESDAY)
-//  F126 DLC - Season 1
+//  F126 DLC - Season 2
 // ====================================================================
 
 require('dotenv').config();
@@ -269,11 +269,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const embed = new EmbedBuilder()
-          .setTitle(" F126 DLC - Season 1 Sign-Up")
+          .setTitle("F126 DLC - Season 2 Sign-Up")
           .setDescription([
-            "Welcome to the **TTRL  F126 DLC - Season 1** sign-up.",
+            "Welcome to the **TTRL F126 DLC - Season 2** sign-up.",
             "",
-            "🏁 **Sunday:** 4 paced tiers",
+            "🏁 **Sunday:** 5 paced tiers",
             "🏁 **Wednesday:** 2 paced tiers",
             "🕗 **All races start at 8pm UK time**",
             "",
